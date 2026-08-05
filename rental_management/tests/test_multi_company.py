@@ -1,6 +1,7 @@
 from odoo import Command
 from odoo.exceptions import AccessError, ValidationError
 from odoo.tests import tagged
+from odoo.tests.common import new_test_user
 
 from .common import RentalCommon
 
@@ -13,14 +14,13 @@ class TestRentalMultiCompany(RentalCommon):
         cls.company_b_data = cls.setup_other_company(name="Rental Company B")
         cls.company_b = cls.company_b_data["company"]
         cls.property_b = cls._create_property("Company B Unit", company=cls.company_b)
-        cls.user_a = cls.env["res.users"].create(
-            {
-                "name": "Company A Rental User",
-                "login": "company_a_rental_user",
-                "company_id": cls.env.company.id,
-                "company_ids": [Command.set(cls.env.company.ids)],
-                "group_ids": [Command.link(cls.env.ref("rental_management.property_rental_manager").id)],
-            }
+        cls.user_a = new_test_user(
+            cls.env,
+            login="company_a_rental_user",
+            groups="rental_management.property_rental_manager",
+            name="Company A Rental User",
+            company_id=cls.env.company.id,
+            company_ids=[Command.set(cls.env.company.ids)],
         )
 
     def test_company_rule_hides_other_company(self):
@@ -35,4 +35,7 @@ class TestRentalMultiCompany(RentalCommon):
 
     def test_dashboard_respects_allowed_companies(self):
         stats = self.env["property.details"].with_user(self.user_a).get_property_stats()
-        self.assertLess(stats["total_property"], self.env["property.details"].search_count([]))
+        all_company_total = self.env["property.details"].with_context(
+            allowed_company_ids=(self.env.company | self.company_b).ids
+        ).search_count([])
+        self.assertLess(stats["total_property"], all_company_total)

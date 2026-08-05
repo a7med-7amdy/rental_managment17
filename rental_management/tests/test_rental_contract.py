@@ -35,18 +35,21 @@ class TestRentalContract(RentalCommon):
     def test_close_and_cancel_preserve_invoices(self):
         contract = self._create_contract(activate=True)
         schedule = contract.rent_invoice_ids[:1]
-        schedule.action_create_invoice()
-        move = schedule.rent_invoice_id
+        move = schedule._create_account_move()
+        unbilled_schedule = contract.rent_invoice_ids.filtered(
+            lambda line: not line.rent_invoice_id
+        )[:1]
         contract.action_close_contract()
         self.assertTrue(move.exists())
         self.assertEqual(contract.property_id.stage, "available")
+        self.assertTrue(unbilled_schedule)
         with self.assertRaises(UserError):
-            schedule._create_account_move()
+            unbilled_schedule._create_account_move()
 
     def test_cancel_rejects_posted_invoice(self):
         contract = self._create_contract(activate=True)
         schedule = contract.rent_invoice_ids[:1]
-        move = schedule.action_create_invoice()
+        move = schedule._create_account_move()
         move.action_post()
         with self.assertRaises(UserError):
             contract.action_cancel_contract(reason="Cancellation requested")

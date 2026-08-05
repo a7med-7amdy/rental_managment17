@@ -2,7 +2,6 @@
 # Copyright 2020-Today TechKhedut.
 # Part of TechKhedut. See LICENSE file for full copyright and licensing details.
 
-import calendar
 import logging
 from datetime import timedelta
 
@@ -386,7 +385,15 @@ class TenancyDetails(models.Model):
         "rent_invoice_ids.rent_invoice_id.state",
     )
     def _compute_tenancy_calculation(self):
+        can_read_moves = self.env["account.move"].browse().has_access("read")
         for contract in self:
+            if not can_read_moves:
+                contract.total_tenancy = 0.0
+                contract.total_amount = 0.0
+                contract.tax_amount = 0.0
+                contract.remain_tenancy = 0.0
+                contract.paid_tenancy = 0.0
+                continue
             moves = contract.rent_invoice_ids.mapped("rent_invoice_id").filtered(
                 lambda move: move.state != "cancel"
             )
@@ -401,9 +408,14 @@ class TenancyDetails(models.Model):
             [("tenancy_id", "in", self.ids)], ["tenancy_id"], ["__count"]
         ) if self.ids else []
         invoice_map = {contract.id: count for contract, count in invoice_groups}
-        move_groups = self.env["account.move"]._read_group(
-            [("tenancy_id", "in", self.ids)], ["tenancy_id"], ["__count"]
-        ) if self.ids else []
+        move_model = self.env["account.move"]
+        move_groups = (
+            move_model._read_group(
+                [("tenancy_id", "in", self.ids)], ["tenancy_id"], ["__count"]
+            )
+            if self.ids and move_model.browse().has_access("read")
+            else []
+        )
         move_map = {contract.id: count for contract, count in move_groups}
         maintenance_groups = self.env["maintenance.request"]._read_group(
             [("tenancy_id", "in", self.ids)], ["tenancy_id"], ["__count"]
@@ -430,7 +442,15 @@ class TenancyDetails(models.Model):
             contract.commission_count = commission_map.get(contract.id, 0)
             contract.renewal_count = renewal_map.get(contract.id, 0)
 
-    @api.constrains("start_date", "end_date", "duration_id", "invoice_start_date", "total_rent")
+    @api.constrains(
+        "start_date",
+        "end_date",
+        "duration_id",
+        "invoice_start_date",
+        "total_rent",
+        "deposit_amount",
+        "contract_type",
+    )
     def _check_contract_dates_and_amounts(self):
         for contract in self:
             if contract.duration_id and contract.duration_id.month <= 0:
@@ -440,8 +460,12 @@ class TenancyDetails(models.Model):
             if contract.invoice_start_date and contract.start_date and contract.end_date:
                 if not contract.start_date <= contract.invoice_start_date <= contract.end_date:
                     raise ValidationError(_("Invoice start date must fall within the contract period."))
-            if contract.total_rent <= 0:
-                raise ValidationError(_("Rent amount must be greater than zero."))
+            if contract.total_rent < 0:
+                raise ValidationError(_("Rent amount cannot be negative."))
+            if contract.contract_type != "new_contract" and contract.total_rent <= 0:
+                raise ValidationError(_("Rent amount must be greater than zero before activation."))
+            if contract.deposit_amount < 0:
+                raise ValidationError(_("Security deposit cannot be negative."))
 
     @api.constrains("broker_commission_percentage", "broker_commission", "is_any_broker")
     def _check_broker_values(self):
@@ -572,7 +596,7 @@ class TenancyDetails(models.Model):
         for contract in self:
             if contract.contract_type not in ("running_contract", "expire_contract"):
                 raise UserError(_("Only running or expired contracts can be closed."))
-            posted_open = contract.rent_invoice_ids.mapped("rent_invoice_id").filtered(
+            posted_open = contract.rent_invoice_ids.sudo().mapped("rent_invoice_id").filtered(
                 lambda move: move.state == "posted" and move.amount_residual > 0
             )
             if posted_open:
@@ -611,7 +635,7 @@ class TenancyDetails(models.Model):
         for contract in self:
             if contract.contract_type in ("close_contract", "cancel_contract"):
                 raise UserError(_("The contract is already closed or cancelled."))
-            posted = contract.rent_invoice_ids.mapped("rent_invoice_id").filtered(
+            posted = contract.rent_invoice_ids.sudo().mapped("rent_invoice_id").filtered(
                 lambda move: move.state == "posted"
             )
             if posted:
@@ -733,23 +757,44 @@ class TenancyDetails(models.Model):
         return None
 
     def _iter_invoice_periods(self):
+        """Yield periods anchored to the original contract start date.
+
+        Recomputing each boundary from the original anchor avoids month-end
+        drift (for example, a contract starting on January 31 must not grow an
+        extra installment after February shortens the intermediate boundary).
+        """
         self.ensure_one()
         if not self.start_date or not self.end_date:
             return
         if self.payment_term == "full_payment":
             yield self.start_date, self.end_date, self.invoice_start_date, "full_rent"
             return
-        delta = self._get_period_delta()
-        if not delta:
+        if self.payment_term in ("monthly", "quarterly"):
+            step_months = 1 if self.payment_term == "monthly" else 3
+            offset_months = 0
+            while True:
+                period_start = self.start_date + relativedelta(months=offset_months)
+                if period_start > self.end_date:
+                    break
+                next_boundary = self.start_date + relativedelta(
+                    months=offset_months + step_months
+                )
+                period_end = min(next_boundary - timedelta(days=1), self.end_date)
+                due_date = self.invoice_start_date + relativedelta(months=offset_months)
+                yield period_start, period_end, due_date, "rent"
+                offset_months += step_months
             return
-        period_start = self.start_date
-        due_date = self.invoice_start_date
-        while period_start <= self.end_date:
-            nominal_next = period_start + delta
-            period_end = min(nominal_next - timedelta(days=1), self.end_date)
-            yield period_start, period_end, due_date, "rent"
-            period_start = nominal_next
-            due_date += delta
+        if self.payment_term == "year":
+            offset_years = 0
+            while True:
+                period_start = self.start_date + relativedelta(years=offset_years)
+                if period_start > self.end_date:
+                    break
+                next_boundary = self.start_date + relativedelta(years=offset_years + 1)
+                period_end = min(next_boundary - timedelta(days=1), self.end_date)
+                due_date = self.invoice_start_date + relativedelta(years=offset_years)
+                yield period_start, period_end, due_date, "rent"
+                offset_years += 1
 
     def _ensure_installment_schedule(self):
         self.ensure_one()
@@ -802,25 +847,54 @@ class TenancyDetails(models.Model):
         self.ensure_one()
         if self.payment_term == "full_payment":
             return self.total_rent * self._get_contract_charge_units()
+        month_quantity = self._count_month_equivalents(period_start, period_end)
         if self.payment_term in ("monthly", "quarterly"):
-            return self.total_rent * self._count_month_equivalents(period_start, period_end)
+            return self.total_rent * month_quantity
         if self.payment_term == "year":
-            nominal_end = period_start + relativedelta(years=1) - timedelta(days=1)
-            nominal_days = (nominal_end - period_start).days + 1
-            actual_days = (period_end - period_start).days + 1
-            return self.total_rent * actual_days / nominal_days
+            return self.total_rent * month_quantity / 12.0
         return self.total_rent
 
-    @api.model
     def _count_month_equivalents(self, period_start, period_end):
+        """Return contract-anchored month units with final-period proration."""
+        self.ensure_one()
+        if not period_start or not period_end or period_end < period_start:
+            return 0.0
+        anchor = self.start_date or period_start
+        offset = 0
+        cursor = anchor
+        max_months = max(self._get_contract_months() + 24, 120)
+        while cursor < period_start and offset <= max_months:
+            offset += 1
+            cursor = anchor + relativedelta(months=offset)
+        if cursor != period_start:
+            # Legacy/custom schedules not aligned to a contract boundary.
+            anchor = period_start
+            offset = 0
+            cursor = period_start
         total = 0.0
-        cursor = period_start
-        while cursor <= period_end:
-            days_in_month = calendar.monthrange(cursor.year, cursor.month)[1]
-            segment_end = min(cursor.replace(day=days_in_month), period_end)
-            total += ((segment_end - cursor).days + 1) / days_in_month
-            cursor = segment_end + timedelta(days=1)
+        while cursor <= period_end and offset <= max_months:
+            next_boundary = anchor + relativedelta(months=offset + 1)
+            nominal_end = next_boundary - timedelta(days=1)
+            if period_end >= nominal_end:
+                total += 1.0
+                cursor = next_boundary
+                offset += 1
+                continue
+            nominal_days = (nominal_end - cursor).days + 1
+            actual_days = (period_end - cursor).days + 1
+            total += actual_days / nominal_days
+            break
         return total
+
+    def _get_contract_months(self):
+        self.ensure_one()
+        if self.rent_unit == "Year":
+            return max(self.month, 0) * 12
+        if self.rent_unit == "Month":
+            return max(self.month, 0)
+        if self.start_date and self.end_date:
+            return max((self.end_date - self.start_date).days // 28 + 1, 1)
+        return max(self.month, 0)
 
     def _prepare_period_invoice_lines(self, schedule):
         self.ensure_one()
@@ -1006,6 +1080,8 @@ class TenancyDetails(models.Model):
 
     def action_accounting_invoices(self):
         self.ensure_one()
+        if not self.env["account.move"].browse().has_access("read"):
+            raise UserError(_("You need Accounting read access to open accounting invoices."))
         return {
             "type": "ir.actions.act_window",
             "name": _("Accounting Invoices"),
@@ -1036,6 +1112,8 @@ class TenancyDetails(models.Model):
 
     def action_register_payment(self):
         self.ensure_one()
+        if not self.env["account.move"].browse().has_access("read"):
+            raise UserError(_("You need Accounting access to register rental payments."))
         invoices = self.env["account.move"].search(
             [
                 ("tenancy_id", "=", self.id),

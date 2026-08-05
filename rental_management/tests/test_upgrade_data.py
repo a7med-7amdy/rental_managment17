@@ -17,7 +17,7 @@ class TestUpgradeDataIntegrity(RentalCommon):
         running_property = self._create_property("Legacy Running Unit")
         running = self._create_contract(property_id=running_property, activate=True)
         schedule = running.rent_invoice_ids[:1]
-        move = schedule.action_create_invoice()
+        move = schedule._create_account_move()
 
         self.env["tenancy.details"]._cron_process_rental_lifecycle()
 

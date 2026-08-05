@@ -10,6 +10,9 @@ class RentalCommon(AccountTestInvoicingCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
+        manager_group = cls.env.ref("rental_management.property_rental_manager")
+        if not cls.env.user.has_group("rental_management.property_rental_manager"):
+            cls.env.user.sudo().write({"group_ids": [Command.link(manager_group.id)]})
         cls.env["ir.config_parameter"].sudo().set_param(
             "rental_management.invoice_post_type", "manual"
         )

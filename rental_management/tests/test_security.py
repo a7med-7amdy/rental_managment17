@@ -1,6 +1,7 @@
 from odoo import Command
 from odoo.exceptions import AccessError, UserError
 from odoo.tests import tagged
+from odoo.tests.common import new_test_user
 
 from .common import RentalCommon
 
@@ -10,32 +11,29 @@ class TestRentalAccessRights(RentalCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.officer = cls.env["res.users"].create(
-            {
-                "name": "Rental Officer",
-                "login": "rental_officer_test",
-                "company_id": cls.env.company.id,
-                "company_ids": [Command.set(cls.env.company.ids)],
-                "group_ids": [Command.link(cls.env.ref("rental_management.property_rental_officer").id)],
-            }
+        cls.officer = new_test_user(
+            cls.env,
+            login="rental_officer_test",
+            groups="rental_management.property_rental_officer",
+            name="Rental Officer",
+            company_id=cls.env.company.id,
+            company_ids=[Command.set(cls.env.company.ids)],
         )
-        cls.manager = cls.env["res.users"].create(
-            {
-                "name": "Rental Manager",
-                "login": "rental_manager_test",
-                "company_id": cls.env.company.id,
-                "company_ids": [Command.set(cls.env.company.ids)],
-                "group_ids": [Command.link(cls.env.ref("rental_management.property_rental_manager").id)],
-            }
+        cls.manager = new_test_user(
+            cls.env,
+            login="rental_manager_test",
+            groups="rental_management.property_rental_manager",
+            name="Rental Manager",
+            company_id=cls.env.company.id,
+            company_ids=[Command.set(cls.env.company.ids)],
         )
-        cls.internal = cls.env["res.users"].create(
-            {
-                "name": "Internal No Rental Group",
-                "login": "rental_internal_test",
-                "company_id": cls.env.company.id,
-                "company_ids": [Command.set(cls.env.company.ids)],
-                "group_ids": [Command.link(cls.env.ref("base.group_user").id)],
-            }
+        cls.internal = new_test_user(
+            cls.env,
+            login="rental_internal_test",
+            groups="base.group_user",
+            name="Internal No Rental Group",
+            company_id=cls.env.company.id,
+            company_ids=[Command.set(cls.env.company.ids)],
         )
 
     def test_officer_cannot_delete_active_contract(self):
@@ -51,6 +49,19 @@ class TestRentalAccessRights(RentalCommon):
             contract.with_user(self.officer).action_close_contract()
         with self.assertRaises(AccessError):
             contract.with_user(self.officer).action_cancel_contract(reason="Not authorized")
+
+    def test_manager_can_close_without_accounting_group(self):
+        contract = self._create_contract(activate=True)
+        self.assertFalse(self.manager.has_group("account.group_account_invoice"))
+        contract.with_user(self.manager).action_close_contract()
+        self.assertEqual(contract.contract_type, "close_contract")
+
+    def test_manager_can_cancel_without_accounting_group(self):
+        property_record = self._create_property("Manager Cancel Unit")
+        contract = self._create_contract(property_id=property_record, activate=True)
+        contract.with_user(self.manager).action_cancel_contract(reason="Manager cancellation")
+        self.assertEqual(contract.contract_type, "cancel_contract")
+        self.assertEqual(contract.property_id.stage, "available")
 
     def test_manager_has_officer_privilege(self):
         self.assertTrue(self.manager.has_group("rental_management.property_rental_officer"))

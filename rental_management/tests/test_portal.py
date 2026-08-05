@@ -1,6 +1,7 @@
 from odoo import Command
 from odoo.exceptions import AccessError
 from odoo.tests import HttpCase, tagged
+from odoo.tests.common import new_test_user
 
 from .common import RentalCommon
 
@@ -10,27 +11,23 @@ class TestPortalOwnership(RentalCommon):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.portal_a = cls.env["res.users"].create(
-            {
-                "name": "Portal Tenant A",
-                "login": "portal_tenant_a",
-                "password": "portal_tenant_a",
-                "partner_id": cls.tenant.id,
-                "company_id": cls.env.company.id,
-                "company_ids": [Command.set(cls.env.company.ids)],
-                "group_ids": [Command.link(cls.env.ref("base.group_portal").id)],
-            }
+        cls.portal_a = new_test_user(
+            cls.env,
+            login="portal_tenant_a",
+            groups="base.group_portal",
+            name="Portal Tenant A",
+            partner_id=cls.tenant.id,
+            company_id=cls.env.company.id,
+            company_ids=[Command.set(cls.env.company.ids)],
         )
-        cls.portal_b = cls.env["res.users"].create(
-            {
-                "name": "Portal Tenant B",
-                "login": "portal_tenant_b",
-                "password": "portal_tenant_b",
-                "partner_id": cls.tenant_b.id,
-                "company_id": cls.env.company.id,
-                "company_ids": [Command.set(cls.env.company.ids)],
-                "group_ids": [Command.link(cls.env.ref("base.group_portal").id)],
-            }
+        cls.portal_b = new_test_user(
+            cls.env,
+            login="portal_tenant_b",
+            groups="base.group_portal",
+            name="Portal Tenant B",
+            partner_id=cls.tenant_b.id,
+            company_id=cls.env.company.id,
+            company_ids=[Command.set(cls.env.company.ids)],
         )
         cls.contract_a = cls._create_contract(activate=True)
         cls.property_b = cls._create_property("Portal B Unit")

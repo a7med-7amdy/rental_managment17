@@ -824,23 +824,29 @@ class PropertyDetails(models.Model):
             ("move_type", "=", "out_invoice"),
             ("state", "=", "posted"),
         ]
-        rent_aggregates = move_model.read_group(
-            rent_moves_domain,
-            ["amount_total:sum", "amount_residual:sum"],
-            [],
-        )
-        rent_totals = rent_aggregates[0] if rent_aggregates else {}
-        collected_amount = (rent_totals.get("amount_total", 0.0) or 0.0) - (
-            rent_totals.get("amount_residual", 0.0) or 0.0
-        )
-        outstanding_amount = rent_totals.get("amount_residual", 0.0) or 0.0
-        overdue_invoice = move_model.search_count(
-            rent_moves_domain
-            + [("invoice_date_due", "<", today), ("amount_residual", ">", 0)]
-        )
-        pending_invoice = move_model.search_count(
-            rent_moves_domain + [("amount_residual", ">", 0)]
-        )
+        if move_model.browse().has_access("read"):
+            rent_aggregates = move_model.read_group(
+                rent_moves_domain,
+                ["amount_total:sum", "amount_residual:sum"],
+                [],
+            )
+            rent_totals = rent_aggregates[0] if rent_aggregates else {}
+            collected_amount = (rent_totals.get("amount_total", 0.0) or 0.0) - (
+                rent_totals.get("amount_residual", 0.0) or 0.0
+            )
+            outstanding_amount = rent_totals.get("amount_residual", 0.0) or 0.0
+            overdue_invoice = move_model.search_count(
+                rent_moves_domain
+                + [("invoice_date_due", "<", today), ("amount_residual", ">", 0)]
+            )
+            pending_invoice = move_model.search_count(
+                rent_moves_domain + [("amount_residual", ">", 0)]
+            )
+        else:
+            collected_amount = 0.0
+            outstanding_amount = 0.0
+            overdue_invoice = 0
+            pending_invoice = 0
         monthly_contracts = contract_model.search(
             company_domain
             + [("contract_type", "=", "running_contract"), ("payment_term", "=", "monthly")]
@@ -859,9 +865,13 @@ class PropertyDetails(models.Model):
             company_domain + [("stage", "=", "sold")], ["sale_price:sum"], []
         )
         sold_total = (sold_total_group[0].get("sale_price", 0.0) if sold_total_group else 0.0) or 0.0
-        pending_invoice_sale = move_model.search_count(
-            company_domain
-            + [("sold_id", "!=", False), ("state", "=", "posted"), ("amount_residual", ">", 0)]
+        pending_invoice_sale = (
+            move_model.search_count(
+                company_domain
+                + [("sold_id", "!=", False), ("state", "=", "posted"), ("amount_residual", ">", 0)]
+            )
+            if move_model.browse().has_access("read")
+            else 0
         )
 
         partner_company_domain = [
@@ -964,9 +974,18 @@ class PropertyDetails(models.Model):
     @api.model
     def due_paid_amount(self):
         company_domain = [("company_id", "=", self.env.company.id)]
+        move_model = self.env["account.move"]
+        if not move_model.browse().has_access("read"):
+            empty = {"Due": 0.0, "Paid": 0.0}
+            return [
+                list(empty.keys()),
+                list(empty.values()),
+                list(empty.keys()),
+                list(empty.values()),
+            ]
 
         def totals(domain):
-            groups = self.env["account.move"].read_group(
+            groups = move_model.read_group(
                 company_domain + domain + [("state", "=", "posted")],
                 ["payment_state", "amount_total:sum", "amount_residual:sum"],
                 ["payment_state"],

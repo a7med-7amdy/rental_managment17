@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date
 
 from odoo.fields import Command
 from odoo.tests import tagged
@@ -19,15 +19,29 @@ class TestRentInvoicing(RentalCommon):
 
     def test_missed_cron_catches_up_once(self):
         contract = self._create_contract(activate=True)
-        contract.type = "automatic"
+        contract.write({"type": "automatic"})
         schedule = contract.rent_invoice_ids.sorted("due_date")[:1]
-        schedule.rent_invoice_id = False
         schedule.due_date = self.yesterday()
+        self.assertEqual(schedule.installment_type, "automatic")
         self.env["rent.invoice"]._cron_create_due_invoices()
         invoice = schedule.rent_invoice_id
         self.assertTrue(invoice)
         self.env["rent.invoice"]._cron_create_due_invoices()
         self.assertEqual(schedule.rent_invoice_id, invoice)
+
+
+    def test_month_end_anchor_does_not_create_extra_installment(self):
+        property_record = self._create_property("Month End Unit")
+        contract = self._create_contract(
+            property_id=property_record,
+            duration_id=self.duration_4m.id,
+            start_date=date(2026, 1, 31),
+            invoice_start_date=date(2026, 1, 31),
+        )
+        contract.action_activate_contract()
+        schedules = contract.rent_invoice_ids.sorted("period_start")
+        self.assertEqual(len(schedules), 4)
+        self.assertEqual(schedules.mapped("rent_amount"), [1000.0] * 4)
 
     def test_quarterly_and_partial_final_period(self):
         contract = self._create_contract(

@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-The `rental_management` module was structurally upgraded from version **3.1.1** to **19.0.1.0.2** while retaining:
+The `rental_management` module was structurally upgraded from version **3.1.1** to **19.0.1.0.6** while retaining:
 
 - Technical module name: `rental_management`
 - Original author: `TechKhedut Inc.`
@@ -17,7 +17,7 @@ The upgrade focused on Odoo 19 compatibility, rental lifecycle visibility, accou
 | Item | Value |
 |---|---|
 | Original module version | `3.1.1` |
-| Final module version | `19.0.1.0.2` |
+| Final module version | `19.0.1.0.6` |
 | Target platform | Odoo 19 Enterprise |
 | Technical name | `rental_management` |
 | Author | TechKhedut Inc. |
@@ -443,11 +443,13 @@ See `MIGRATION_NOTES.md` for the operational procedure.
 
 ## 8. Known Limitations
 
-1. An Odoo 19 runtime was not installed in the provided execution environment. Clean-install, upgrade, browser, PDF-rendering, mail-delivery, and JavaScript runtime tests were therefore not executed here.
-2. The QWeb reports were XML-parsed but not rendered by an Odoo 19 report engine.
-3. Migration anomaly repair is intentionally conservative. Overlapping or incomplete historical records are logged for business review rather than automatically deleted or altered.
-4. XLS output is now XLSX. This is intentional because the previous `xlwt` dependency was unavailable and obsolete for modern deployments.
-5. Dashboard monetary totals are deliberately scoped to the active company to avoid summing unrelated currencies across companies.
+1. Supplied Odoo.sh runs reached module post-install tests, but version `19.0.1.0.6` has not yet completed a fresh Odoo.sh runtime run. The next build remains required for runtime acceptance.
+2. An existing-database upgrade with representative production data has not yet been evidenced. It must be executed on a staging clone before production.
+3. QWeb PDF reports have been XML-validated but not visually approved from rendered Odoo 19 PDFs in this workspace.
+4. Migration anomaly repair is intentionally conservative. Overlapping or incomplete historical records are logged for business review rather than automatically deleted or altered.
+5. XLS output is now XLSX. This is intentional because the previous `xlwt` dependency was unavailable and obsolete for modern deployments.
+6. Dashboard monetary totals are deliberately scoped to the active company to avoid summing unrelated currencies across companies.
+7. The separate docutils indentation warning visible in the repository log is not attributable to this module from the supplied evidence; repository-wide addon descriptions/README files must be audited separately.
 
 ## 9. Final Status
 
@@ -467,7 +469,7 @@ Static validation completed successfully for:
 - Debug/TODO/pass placeholders.
 - Compiled/temporary file cleanup.
 
-Runtime acceptance remains subject to executing the clean-install and upgrade commands documented in `TEST_REPORT.md` on an actual Odoo 19 Enterprise environment.
+The supplied Odoo.sh runtime has already validated module import, registry/data/view loading, asset generation, and entry into post-install tests. Final runtime acceptance remains subject to rerunning `19.0.1.0.6` and executing the existing-database upgrade command documented in `TEST_REPORT.md` on a staging clone.
 
 
 ## Registry Hotfix 19.0.1.0.2
@@ -499,3 +501,16 @@ Runtime acceptance remains subject to executing the clean-install and upgrade co
 - Test products are now created with the official inherited `_create_product()` helper used by Odoo 19 accounting tests.
 - All shared fixture products are explicitly created as service products.
 - This is a tests-only correction; production models, views, data, security, and migrations are unchanged.
+
+
+## 19. Runtime Hardening Hotfix — 19.0.1.0.6
+
+The Odoo.sh run for `19.0.1.0.5` completed module loading and asset generation, then exposed a shared-test authorization error while creating `contract.duration`. Version `19.0.1.0.6` adds the Rental Manager group to the accounting-ready shared fixture before rental configuration creation.
+
+The full test source was then reviewed proactively. Corrections include official Odoo 19 `new_test_user()` fixtures, proper retrieval of invoices instead of treating Boolean button returns as records, closed-contract invoice regression checks, automatic-installment recomputation coverage, multi-company test context, and manager operations without Accounting privilege.
+
+The invoicing engine was also corrected to anchor month/quarter/year boundaries to the original contract start date. This eliminates month-end drift and ensures complete contractual months are charged in full while only the final partial month is prorated.
+
+Production authorization was hardened so a Rental Manager can close or cancel without broad Accounting rights. Linked invoice states are inspected through narrowly scoped elevated reads only after Rental Manager authorization; accounting records remain preserved and unmodified. Dashboard/accounting computes are access-aware.
+
+No model or field rename is introduced by this hotfix. No data rewrite is required.

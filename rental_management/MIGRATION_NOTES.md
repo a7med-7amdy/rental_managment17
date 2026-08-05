@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-These notes apply when upgrading an existing database containing `rental_management` data to module version `19.0.1.0.2`.
+These notes apply when upgrading an existing database containing `rental_management` data to module version `19.0.1.0.6`.
 
 The migration is conservative: it preserves historical records and reports anomalies rather than deleting or silently rewriting business history.
 
@@ -238,7 +238,7 @@ Do not attempt to partially reverse schema/data changes manually on the only pro
 - Run the lifecycle cron twice in staging and confirm no duplicate invoice is produced.
 
 
-## 10. Registry Hotfix Migration 19.0.1.0.2
+## 11. Registry Hotfix Migration 19.0.1.0.2
 
 The `19.0.1.0.2` pre-migration checks for and drops only these obsolete constraints if they exist:
 
@@ -250,15 +250,31 @@ The `19.0.1.0.2` pre-migration checks for and drops only these obsolete constrai
 
 They were removed because an existing database can contain valid incomplete draft or historical rows. Business validation continues in Python on record changes and contract activation. No rows are deleted or rewritten.
 
-## 19.0.1.0.3 product data note
+## 12. 19.0.1.0.3 product data note
 
 The legacy root-category external ID `product.product_category_all` was removed in Odoo 19. The module's Property category is now created under the standard Services category using `product.product_category_services`. Existing module XML IDs and product references remain unchanged.
 
-## 19.0.1.0.4 search-view note
+## 13. 19.0.1.0.4 search-view note
 
 This release changes view architecture only. It does not rename models, fields, selection keys, database columns, or XML IDs and therefore requires no data migration script. Upgrade the module normally after taking the standard database and filestore backup.
 
 
-## 19.0.1.0.5 test-fixture note
+## 14. 19.0.1.0.5 test-fixture note
 
 This release modifies only automated test setup. It creates test products through Odoo's `_create_product()` helper instead of copying a product variant with `lst_price` defaults. No database migration or business-data transformation is required.
+
+
+## 15. Hotfix 19.0.1.0.6
+
+This hotfix does not rename models, fields, XML IDs, or database columns and does not require a new migration script.
+
+It changes:
+
+- shared automated-test authorization;
+- Odoo 19 test-user fixture construction;
+- regression-test correctness;
+- contract-anchored billing-period calculation;
+- access-aware accounting totals and dashboard aggregation;
+- narrowly scoped invoice-state inspection for Rental Manager close/cancel operations.
+
+No rental contract, property, invoice, schedule, commission, or accounting record is deleted or rewritten by this version. Standard backup and staging-upgrade procedures remain mandatory.

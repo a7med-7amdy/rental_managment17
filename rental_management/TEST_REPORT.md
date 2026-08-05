@@ -1,222 +1,150 @@
 # rental_management — Test Report
 
-## 1. Test Scope
+## 1. Scope and honesty statement
 
-This report distinguishes between:
+This report separates:
 
-- **Executed static validation** in the supplied workspace.
-- **Authored Odoo automated tests** included in the module.
-- **Runtime tests not executed** because Odoo 19 was not installed in the execution environment.
+1. Odoo.sh runtime results actually supplied from Odoo 19 Enterprise.
+2. Static checks executed in the workspace.
+3. Automated Odoo tests included in the module but not yet rerun for version `19.0.1.0.6`.
 
-No runtime success is claimed.
+No runtime success is claimed for `19.0.1.0.6` until the next Odoo.sh build completes.
 
-
-## 1.1 Odoo.sh Runtime Attempt and Import Hotfix
-
-An actual Odoo.sh module load was attempted on **2026-08-05**. The initial `19.0.1.0.0` package failed before registry initialization with:
+## 2. Runtime environment evidenced by supplied logs
 
 ```text
-ModuleNotFoundError: No module named 'odoo.addons.web_editor'
+Platform: Odoo.sh
+Odoo major version: 19 Enterprise
+Module: rental_management
+Test mode: enabled by Odoo.sh module build/force-demo process
 ```
 
-The failure occurred in three model files that imported video helpers from the pre-Odoo-19 addon path. Version **19.0.1.0.1** applied the following hotfix:
+The supplied Odoo.sh runs demonstrated progressive runtime coverage:
 
-- `odoo.addons.web_editor.tools` → `odoo.addons.html_editor.tools`
-- Adds `html_editor` to manifest dependencies.
-- Re-runs Python, XML, JavaScript, manifest-reference, and package-integrity checks.
+- Python package import reached and exposed the removed `web_editor` import.
+- XML data loading reached and exposed the removed product category XML ID and product field.
+- View validation reached and exposed invalid Search View `group expand` architecture.
+- Asset bundles were generated successfully.
+- The post-install test suite started.
 
-A second Odoo.sh attempt reached model reflection and exposed manifest-description and duplicate-label warnings, followed by a registry failure whose fatal traceback was not included in the supplied excerpt. Version `19.0.1.0.2` addresses every visible warning and removes strict SQL checks that could reject incomplete legacy draft/history records during upgrade. Runtime acceptance remains pending another Odoo.sh build.
+Therefore, the current module has passed the runtime stages before post-install tests in the latest supplied run.
 
-## 2. Validation Environment
+## 3. Latest Odoo.sh runtime result — version 19.0.1.0.5
 
-| Component | Version / Result |
-|---|---|
-| Execution date | 2026-08-05 |
-| Python | 3.13.5 |
-| Node.js | 22.16.0 |
-| lxml | 6.1.1 |
-| Babel | 2.18.0 |
-| XlsxWriter | 3.2.9 |
-| Odoo Python package | Not installed |
-| `odoo-bin` | Not available |
-| Target Odoo version | Odoo 19 Enterprise |
-
-## 3. Executed Static Checks
-
-### 3.1 Python syntax and compilation
-
-Executed against every Python source file, including models, controllers, wizards, migration scripts, and tests.
-
-Result:
+Odoo.sh completed registry/module loading and asset generation, then entered module tests. Five test classes stopped in `RentalCommon.setUpClass()` while creating `contract.duration`:
 
 ```text
-Python files checked: 45
-Syntax/compile errors: 0
+odoo.exceptions.AccessError:
+You are not allowed to create 'Contract Duration' records.
+Allowed group: Rental Management / Rental Manager
 ```
 
-### 3.2 XML parsing
-
-All manifest-loaded XML, portal templates, QWeb reports, security data, cron data, mail templates, and wizard views were parsed with `lxml`.
-
-Result:
+Reported result:
 
 ```text
-XML files checked: 56
-XML parse errors: 0
+0 failed, 5 errors
+Test suite halted after reaching max failed tests
 ```
 
-### 3.3 JavaScript syntax
+This is a test-fixture authorization error, not an XML/view/import failure and not evidence of five different production defects.
 
-Executed:
+## 4. Corrections prepared in version 19.0.1.0.6
 
-```bash
-node --check static/src/js/rental.js
-```
+### 4.1 Shared fixture authorization
 
-Result:
+The shared accounting-ready test user receives the Rental Manager group before creating rental configuration records. Production ACLs are not weakened.
+
+### 4.2 Official Odoo 19 user fixtures
+
+`new_test_user()` is used for:
+
+- Rental Officer.
+- Rental Manager.
+- Internal user without rental access.
+- Company-restricted rental user.
+- Portal User A.
+- Portal User B.
+
+### 4.3 Additional test-source corrections
+
+The suite was reviewed beyond the immediate AccessError:
+
+- Real invoices are retrieved from `rent.invoice._create_account_move()`.
+- Boolean action returns are no longer treated as `account.move` records.
+- Closed contracts are tested against uninvoiced schedules.
+- Automatic installment mode is verified before missed-cron processing.
+- Multi-company dashboard comparison uses explicit allowed companies.
+- Manager close/cancel is tested without Accounting privilege.
+- A month-end contract regression verifies exactly four schedules from a four-month contract starting on 31 January.
+
+### 4.4 Production logic corrections covered by tests
+
+- Contract-start-anchored monthly, quarterly, and yearly boundaries.
+- Full-month charging and final-partial-period proration.
+- Access-aware accounting totals/dashboard data.
+- Narrow invoice-state read elevation after Rental Manager authorization.
+- Draft/non-draft rent validation and negative-deposit rejection.
+
+## 5. Automated Odoo tests included
+
+The module contains **31 test methods** in:
 
 ```text
-Passed
+tests/test_property_lifecycle.py
+tests/test_rental_contract.py
+tests/test_rent_invoicing.py
+tests/test_contract_renewal.py
+tests/test_broker_commission.py
+tests/test_security.py
+tests/test_multi_company.py
+tests/test_portal.py
+tests/test_upgrade_data.py
 ```
 
-### 3.4 Manifest file reference validation
+Coverage includes:
 
-Validated every path declared under:
+- Property Draft → Available → Rented → Available lifecycle.
+- Required activation data.
+- Contract overlap prevention.
+- Monthly invoice idempotency.
+- Missed-cron catch-up.
+- Month-end billing anchors.
+- Quarterly billing and final period.
+- Service amount calculation.
+- Yearly billing.
+- Full payment and manual schedules.
+- Renewal links and next-day start.
+- Tenant, landlord, and dual-source commissions.
+- Officer/Manager/Internal/Public access.
+- Rental Manager operations without Accounting group.
+- Portal ownership isolation.
+- Multi-company isolation and dashboard scope.
+- Upgrade-state/accounting-history preservation.
 
-- `data`
-- `assets`
-- `images`
+## 6. Static validation executed for 19.0.1.0.6
 
-Result:
+The final workspace and independently extracted ZIP are checked for:
 
-```text
-Missing manifest files: 0
-```
+- Python AST parsing and in-memory compilation.
+- Manifest syntax, required keys, version, dependencies, and referenced files.
+- XML well-formedness and duplicate explicit XML IDs.
+- CSV structure.
+- PO translation parsing.
+- JavaScript syntax with `node --check`.
+- Package import targets.
+- Cron method existence.
+- Object-button method existence.
+- Deprecated Odoo patterns used by the previous version.
+- Invalid product test-copy patterns.
+- Direct test-user creation patterns.
+- Compiled/cache/debug files.
+- ZIP CRC integrity.
 
-### 3.5 Translation parsing
+Final counts are recorded in the external versioned test report and verification output after package creation.
 
-Parsed all PO catalogs using Babel.
+## 7. Runtime commands for acceptance
 
-Result:
-
-```text
-ar_001.po: parsed
- de.po: parsed
- es.po: parsed
- ro.po: parsed
- nl.po: parsed
- fr.po: parsed
-PO parse errors: 0
-```
-
-### 3.6 Structural duplicate/reference audit
-
-Custom static audit result:
-
-```text
-Python classes inspected: 72
-Custom models detected: 52
-Field declarations inspected: 858
-Methods inspected: 297
-Duplicate custom fields: 0
-Duplicate custom methods: 0
-XML records: 216
-Views: 87
-XML IDs: 273
-Object buttons cross-checked: 71
-Cron methods cross-checked: 8
-Duplicate XML IDs: 0
-Missing local XML references: 0
-ACL rows: 110
-ACL references to missing custom models: 0
-```
-
-
-### 3.7 Legacy/dead-code pattern scan
-
-Scanned for:
-
-- `<tree>`
-- `view_mode` containing `tree`
-- `attrs=`
-- `states=`
-- `print()`
-- `TODO`
-- bare `pass` placeholders
-- eager date/datetime defaults
-- legacy Python many-to-many tuple commands
-- `xlwt` imports
-
-Result:
-
-```text
-Blocking matches: 0
-```
-
-### 3.8 External dependency check
-
-```text
-xlsxwriter: available (3.2.9)
-xlwt: removed from module imports
-```
-
-`xlsxwriter` is declared under `external_dependencies` in `__manifest__.py`.
-
-### 3.9 Cross-file and package checks
-
-Validated:
-
-- Every Python package `__init__.py` imports its model, wizard, controller, and test modules.
-- All 71 XML object buttons resolve to methods on the correct parent or One2many comodel.
-- All 8 scheduled-action methods resolve to loaded model methods.
-- Manifest image, data, report, template, and asset paths exist.
-- No `__pycache__`, `.pyc`, `.pyo`, `.DS_Store`, or removed legacy dashboard libraries are present in the delivery tree.
-
-Result:
-
-```text
-Cross-file/package errors: 0
-```
-
-### 3.10 Runtime availability check
-
-Executed:
-
-```bash
-command -v odoo-bin
-python -c "import odoo"
-```
-
-Result:
-
-```text
-odoo-bin: not available
-Python import odoo: ModuleNotFoundError
-```
-
-## 4. Automated Odoo Tests Included
-
-The module contains **28 automated test methods** across the following files:
-
-| File | Coverage |
-|---|---|
-| `test_property_lifecycle.py` | Draft → available → running → rented → closed → available |
-| `test_rental_contract.py` | Required activation fields, overlap, close/cancel history, posted invoice protection |
-| `test_rent_invoicing.py` | Monthly, missed cron, quarterly, service amount, yearly, full payment, manual schedules |
-| `test_contract_renewal.py` | Next-day renewal, old/new links, data copying, overlap behavior |
-| `test_broker_commission.py` | Tenant, landlord, both sources, fixed and percentage commission |
-| `test_security.py` | Officer, manager, internal user, portal/public access, server-side close/cancel restriction |
-| `test_multi_company.py` | Company rules, cross-company rejection, dashboard isolation |
-| `test_portal.py` | Contract ownership, maintenance ownership, unauthorized creation, authentication |
-| `test_upgrade_data.py` | Existing states and accounting history preservation |
-
-Test classes use Odoo accounting-ready test data through `AccountTestInvoicingCommon`, `Command`, tagged Odoo tests, and portal HTTP tests where appropriate.
-
-## 5. Runtime Commands Required for Acceptance
-
-These commands were prepared but could not be executed in this environment.
-
-### 5.1 Clean installation
+### 7.1 Clean installation
 
 ```bash
 odoo-bin \
@@ -227,7 +155,7 @@ odoo-bin \
   --log-level=test
 ```
 
-### 5.2 Existing database upgrade
+### 7.2 Existing database upgrade
 
 ```bash
 odoo-bin \
@@ -238,111 +166,57 @@ odoo-bin \
   --log-level=test
 ```
 
-Recommended Odoo.sh equivalent:
+### 7.3 Recommended focused rerun
 
 ```bash
-odoo-bin -d "$DB_NAME" -u rental_management --stop-after-init --test-enable --log-level=test
+odoo-bin \
+  -d rental_test_clean \
+  -u rental_management \
+  --stop-after-init \
+  --test-enable \
+  --test-tags /rental_management \
+  --log-level=test
 ```
 
-Use a duplicate/staging database, never the only production database.
+## 8. Separate docutils warning
 
-## 6. Runtime Test Status
-
-| Test category | Status |
-|---|---|
-| Python static syntax | Passed |
-| XML static syntax | Passed |
-| JavaScript static syntax | Passed |
-| Manifest references | Passed |
-| PO parsing | Passed |
-| Duplicate/static reference audit | Passed |
-| Odoo clean installation | Not executed — Odoo runtime unavailable |
-| Odoo module upgrade | Not executed — Odoo runtime unavailable |
-| Automated Odoo tests | Authored, not executed here |
-| Browser/OWL runtime | Not executed |
-| JavaScript console inspection | Not executed |
-| QWeb PDF rendering | Not executed |
-| Live email delivery | Not executed |
-| Odoo.sh deployment | Not executed |
-
-## 7. Acceptance Checklist for Staging
-
-Before production deployment, verify on Odoo 19 Enterprise:
-
-1. Install the module on a clean database.
-2. Upgrade a copy of the existing production database.
-3. Run all included tests.
-4. Review migration warnings for incomplete or overlapping contracts.
-5. Open every main menu, form, list, kanban, report, and dashboard.
-6. Verify portal access using two unrelated portal users.
-7. Test company switching using users with one and multiple allowed companies.
-8. Create and post monthly, quarterly, yearly, full-payment, service, deposit, maintenance, and commission invoices.
-9. Run the lifecycle cron twice and verify idempotency.
-10. Render Arabic and English contract/property/invoice reports.
-11. Confirm mail templates with valid and missing recipient emails.
-12. Review browser console and server log for warnings/errors.
-
-## 8. Conclusion
-
-All executable static checks passed. Runtime installation, upgrade, and Odoo automated-test results remain pending because no Odoo 19 runtime was available in the workspace.
-
-
-## 9. Static Validation for 19.0.1.0.2
-
-Executed after applying the registry hotfix:
+The supplied log also contains:
 
 ```text
-Python files compiled: 45 / 45
-XML files parsed: 56 / 56
-JavaScript files checked: passed
-Manifest data/assets missing: 0
-CSV row-shape errors: 0
-Duplicate explicit custom-model labels: 0
-Obsolete web_editor imports: 0
-Old tree/attrs/states patterns: 0
+Unexpected indentation
+Block quote ends without a blank line
 ```
 
-The Odoo 19 clean-install and upgrade commands were not executed locally because `odoo-bin`, PostgreSQL, and Odoo 19 Enterprise are not available in this workspace.
+It did not stop registry loading: Odoo continued into asset generation and module tests. The `rental_management` manifest has an explicit plain-text description and the module contains no README/RST file. The available evidence therefore does not identify this module as the source. A repository-wide manifest/README audit is required to remove that separate warning.
 
-## Static verification added for 19.0.1.0.3
+## 9. Current conclusion
 
-- Confirmed no `product.product_category_all` reference remains.
-- Confirmed no `<field name="detailed_type">` remains.
-- Confirmed `product.product_category_services` is used by the custom Property category.
-- Confirmed all seven rental/maintenance products use `<field name="type">service</field>`.
-
-- Confirmed `product` is declared explicitly in the manifest dependencies.
-
-## Static verification added for 19.0.1.0.4
-
-- Parsed all XML files successfully.
-- Audited all search views: only `field`, `filter`, `separator`, `group`, and `searchpanel` are used as direct children.
-- Confirmed all group-by containers inside search views are plain `<group>` elements without obsolete attributes.
-- Confirmed the rental-contract **Expiring Soon** filter uses `relativedelta` rather than an unavailable `datetime` symbol.
-- Python compilation passed.
-- JavaScript syntax validation passed.
-- Final ZIP CRC validation passed.
-
-Odoo runtime installation and upgrade tests remain pending on an actual Odoo 19 environment.
+- Runtime module load before tests: **passed in the supplied latest Odoo.sh run**.
+- Version `19.0.1.0.5` post-install tests: **stopped by shared fixture ACL error**.
+- Version `19.0.1.0.6` source correction: **completed**.
+- Version `19.0.1.0.6` static validation: **executed**.
+- Version `19.0.1.0.6` Odoo runtime tests: **not executed in this workspace**.
+- Final acceptance: requires the next clean Odoo.sh test run and, separately, an upgrade run on a staging copy of production data.
 
 
-## Odoo.sh runtime result received for 19.0.1.0.4
+## 10. Final static result for the packaged source
 
-The supplied Odoo.sh log confirms that module loading, view loading, and asset generation completed far enough to start post-install tests. The suite then reported five identical `setUpClass` errors in the shared fixture:
+The completed `19.0.1.0.6` workspace passed the following checks before ZIP creation:
 
 ```text
-ValueError: Invalid field 'lst_price' in 'product.template'
+Python AST/in-memory compilation: 45 files passed
+Manifest version: 19.0.1.0.6
+XML parsing: 56 files passed
+Explicit XML IDs: 273, no duplicates
+CSV structure: 1 file passed
+PO parsing: 6 files passed
+JavaScript syntax: 1 file passed
+Cron method targets: 8 records passed
+Object-button method targets: 71 buttons passed
+Automated test methods included: 31
+Package import targets: passed
+Deprecated/prohibited code scan: passed
+Cache/temp cleanup: passed
 ```
 
-Affected classes included broker commission, renewal, multi-company, portal ownership, and property lifecycle tests. The test runner stopped after reaching the configured maximum of five errors, so remaining tests were skipped.
-
-### Correction in 19.0.1.0.5
-
-- Replaced all five `product_a.copy({... "lst_price": ...})` calls with `cls._create_product(...)`.
-- Kept `lst_price` on the `product.product` creation API, matching Odoo 19's official accounting test fixtures.
-- Created the fixtures as `type="service"`.
-- Confirmed no equivalent invalid copy pattern remains in the test package.
-
-### Runtime status
-
-The fix has been statically verified in this workspace. A new Odoo.sh test run is required to discover and validate any assertions that were previously skipped after the five-error threshold.
+An independent extraction and revalidation of the final ZIP is performed after packaging. Its ZIP CRC and SHA-256 are reported with the delivery artifact.
