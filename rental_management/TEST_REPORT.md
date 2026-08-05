@@ -324,3 +324,25 @@ The Odoo 19 clean-install and upgrade commands were not executed locally because
 - Final ZIP CRC validation passed.
 
 Odoo runtime installation and upgrade tests remain pending on an actual Odoo 19 environment.
+
+
+## Odoo.sh runtime result received for 19.0.1.0.4
+
+The supplied Odoo.sh log confirms that module loading, view loading, and asset generation completed far enough to start post-install tests. The suite then reported five identical `setUpClass` errors in the shared fixture:
+
+```text
+ValueError: Invalid field 'lst_price' in 'product.template'
+```
+
+Affected classes included broker commission, renewal, multi-company, portal ownership, and property lifecycle tests. The test runner stopped after reaching the configured maximum of five errors, so remaining tests were skipped.
+
+### Correction in 19.0.1.0.5
+
+- Replaced all five `product_a.copy({... "lst_price": ...})` calls with `cls._create_product(...)`.
+- Kept `lst_price` on the `product.product` creation API, matching Odoo 19's official accounting test fixtures.
+- Created the fixtures as `type="service"`.
+- Confirmed no equivalent invalid copy pattern remains in the test package.
+
+### Runtime status
+
+The fix has been statically verified in this workspace. A new Odoo.sh test run is required to discover and validate any assertions that were previously skipped after the five-error threshold.

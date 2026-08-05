@@ -17,12 +17,22 @@ class RentalCommon(AccountTestInvoicingCommon):
         cls.tenant = cls.partner_b.copy({"name": "Rental Tenant", "user_type": "customer"})
         cls.tenant_b = cls.partner_b.copy({"name": "Second Rental Tenant", "user_type": "customer"})
         cls.broker = cls.partner_a.copy({"name": "Rental Broker", "user_type": "broker"})
-        cls.rent_product = cls.product_a.copy({"name": "Rent Product", "lst_price": 1000.0})
-        cls.deposit_product = cls.product_a.copy({"name": "Deposit Product", "lst_price": 500.0})
-        cls.broker_product = cls.product_a.copy({"name": "Broker Product", "lst_price": 250.0})
-        cls.service_product = cls.product_a.copy({"name": "Recurring Service", "lst_price": 100.0})
-        cls.service_product.is_extra_service_product = True
-        cls.maintenance_product = cls.product_a.copy({"name": "Maintenance", "lst_price": 75.0})
+        cls.rent_product = cls._create_product(
+            name="Rent Product", lst_price=1000.0, type="service"
+        )
+        cls.deposit_product = cls._create_product(
+            name="Deposit Product", lst_price=500.0, type="service"
+        )
+        cls.broker_product = cls._create_product(
+            name="Broker Product", lst_price=250.0, type="service"
+        )
+        cls.service_product = cls._create_product(
+            name="Recurring Service", lst_price=100.0, type="service",
+            is_extra_service_product=True,
+        )
+        cls.maintenance_product = cls._create_product(
+            name="Maintenance", lst_price=75.0, type="service"
+        )
         cls.maintenance_product.product_tmpl_id.is_maintenance = True
 
         cls.duration_1m = cls.env["contract.duration"].create(

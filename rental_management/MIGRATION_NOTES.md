@@ -257,3 +257,8 @@ The legacy root-category external ID `product.product_category_all` was removed 
 ## 19.0.1.0.4 search-view note
 
 This release changes view architecture only. It does not rename models, fields, selection keys, database columns, or XML IDs and therefore requires no data migration script. Upgrade the module normally after taking the standard database and filestore backup.
+
+
+## 19.0.1.0.5 test-fixture note
+
+This release modifies only automated test setup. It creates test products through Odoo's `_create_product()` helper instead of copying a product variant with `lst_price` defaults. No database migration or business-data transformation is required.

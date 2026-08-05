@@ -491,3 +491,11 @@ Runtime acceptance remains subject to executing the clean-install and upgrade co
 - Preserved all group-by filters under schema-valid plain `<group>` elements.
 - Replaced `datetime.timedelta(days=30)` with `relativedelta(days=30)` in the rental-contract **Expiring Soon** domain.
 - Added a static search-view architecture audit covering direct child elements and group attributes.
+
+
+## Hotfix 19.0.1.0.5 — Odoo 19 product test fixtures
+
+- Replaced `product.product.copy()` calls that forwarded `lst_price` to `product.template` during test setup.
+- Test products are now created with the official inherited `_create_product()` helper used by Odoo 19 accounting tests.
+- All shared fixture products are explicitly created as service products.
+- This is a tests-only correction; production models, views, data, security, and migrations are unchanged.
