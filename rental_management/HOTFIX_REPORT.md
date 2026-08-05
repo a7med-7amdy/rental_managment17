@@ -1,41 +1,44 @@
-# Hotfix Report — 19.0.1.0.3
+# Hotfix Report — 19.0.1.0.4
 
-## Runtime failure addressed
+## Runtime failure
 
-Odoo 19 stopped while loading `data/property_product_data.xml` because the legacy external ID below no longer exists:
+Odoo 19 rejected the rental contract search view while loading `views/tenancy_details_view.xml`:
 
 ```text
-product.product_category_all
+RELAXNG_ERR_INVALIDATTR: Invalid attribute expand for element group
+Invalid view tenancy.details.search.view definition
 ```
+
+## Root cause
+
+The search view used the legacy group-by container:
+
+```xml
+<group expand="0" string="Group By">
+```
+
+The Odoo 19 search-view schema accepts the `group` element as a structural container, but the legacy `expand` attribute is not valid there.
 
 ## Changes
 
-- Replaced the removed category reference with the Odoo 19 service category:
+- Replaced the legacy search group with a plain `<group>` in:
+  - `views/tenancy_details_view.xml`
+  - `views/property_project_view.xml`
+  - `views/property_sub_project_views.xml`
+- Updated the **Expiring Soon** filter to use `relativedelta(days=30)` instead of `datetime.timedelta(days=30)`, matching the search-domain evaluation context.
+- Preserved all view XML IDs, filter names, domains, group-by fields, and search-panel fields.
+- Bumped the module version from `19.0.1.0.3` to `19.0.1.0.4`.
 
-  ```text
-  product.product_category_services
-  ```
+## Static verification
 
-- Replaced the removed `product.template` field `detailed_type` with the Odoo 19 field `type` for all rental and maintenance service products.
-- Preserved all existing rental module XML IDs, including `rental_management.product_category_property` and all product records.
-- Bumped the module version from `19.0.1.0.2` to `19.0.1.0.3`.
+- Parsed every XML file with `lxml`.
+- Confirmed every search view contains only supported direct child elements.
+- Confirmed no `<search><group ...>` element retains attributes.
+- Confirmed no legacy `<tree>`, `view_mode="tree"`, `attrs`, or `states` patterns remain.
+- Compiled every Python file.
+- Checked JavaScript syntax with Node.js.
+- Tested the final ZIP CRC and inspected the extracted delivery copy.
 
-## Data safety
+## Runtime status
 
-No business model, field technical name, product XML ID, contract, invoice, property, or accounting record was deleted or renamed.
-
-## Validation performed
-
-- Python compilation.
-- XML parsing.
-- Manifest parsing.
-- JavaScript syntax validation.
-- Search for removed `product.product_category_all` references.
-- Search for removed `detailed_type` XML fields.
-- ZIP CRC validation after packaging.
-
-## Runtime limitation
-
-The local workspace does not contain an executable Odoo 19 server, so the clean-install and upgrade commands were not run locally. The changes directly address the runtime traceback and the next incompatible product field found in the same data file.
-
-- Added `product` as an explicit manifest dependency because the module directly references product models, views, categories, and data.
+This hotfix directly addresses the RelaxNG traceback supplied from Odoo.sh. Full Odoo 19 runtime installation was not executed locally because this workspace does not contain an Odoo 19 server and PostgreSQL test database.

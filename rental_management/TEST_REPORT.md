@@ -312,3 +312,15 @@ The Odoo 19 clean-install and upgrade commands were not executed locally because
 - Confirmed all seven rental/maintenance products use `<field name="type">service</field>`.
 
 - Confirmed `product` is declared explicitly in the manifest dependencies.
+
+## Static verification added for 19.0.1.0.4
+
+- Parsed all XML files successfully.
+- Audited all search views: only `field`, `filter`, `separator`, `group`, and `searchpanel` are used as direct children.
+- Confirmed all group-by containers inside search views are plain `<group>` elements without obsolete attributes.
+- Confirmed the rental-contract **Expiring Soon** filter uses `relativedelta` rather than an unavailable `datetime` symbol.
+- Python compilation passed.
+- JavaScript syntax validation passed.
+- Final ZIP CRC validation passed.
+
+Odoo runtime installation and upgrade tests remain pending on an actual Odoo 19 environment.

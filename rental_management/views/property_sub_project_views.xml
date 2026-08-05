@@ -535,7 +535,7 @@
                 <field name="available_unit_count" />
                 <field name="sold_count" />
                 <field name="rent_count" />
-                <group expand="0" string="Group By">
+                <group>
                     <filter string="Project" name="groupby_project" domain="[]"
                         context="{'group_by': 'property_project_id'}" />
                     <filter string="Country" name="groupby_country" domain="[]"

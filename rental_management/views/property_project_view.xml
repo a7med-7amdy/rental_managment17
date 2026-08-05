@@ -589,7 +589,7 @@
                 <!-- <field name="available_unit_count" /> -->
                 <field name="sold_count" />
                 <field name="rent_count" />
-                <group expand="0" string="Group By">
+                <group>
                     <filter string="Project For" name="groupby_project_for" domain="[]"
                         context="{'group_by': 'project_for'}" />
                     <filter string="Property Type" name="groupby_property_type" domain="[]"

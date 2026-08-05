@@ -484,3 +484,10 @@ Runtime acceptance remains subject to executing the clean-install and upgrade co
 - Kept all module-owned XML IDs unchanged for safe installation and upgrade behavior.
 
 - Added `product` as an explicit dependency instead of relying on transitive dependencies.
+
+## Hotfix 19.0.1.0.4 — Search-view RelaxNG compatibility
+
+- Removed the obsolete `expand="0"` and presentation attributes from the group-by containers in all three affected search views.
+- Preserved all group-by filters under schema-valid plain `<group>` elements.
+- Replaced `datetime.timedelta(days=30)` with `relativedelta(days=30)` in the rental-contract **Expiring Soon** domain.
+- Added a static search-view architecture audit covering direct child elements and group attributes.

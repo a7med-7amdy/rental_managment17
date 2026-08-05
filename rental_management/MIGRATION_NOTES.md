@@ -253,3 +253,7 @@ They were removed because an existing database can contain valid incomplete draf
 ## 19.0.1.0.3 product data note
 
 The legacy root-category external ID `product.product_category_all` was removed in Odoo 19. The module's Property category is now created under the standard Services category using `product.product_category_services`. Existing module XML IDs and product references remain unchanged.
+
+## 19.0.1.0.4 search-view note
+
+This release changes view architecture only. It does not rename models, fields, selection keys, database columns, or XML IDs and therefore requires no data migration script. Upgrade the module normally after taking the standard database and filestore backup.

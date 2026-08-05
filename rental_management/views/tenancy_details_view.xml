@@ -362,7 +362,7 @@
                 <filter string="Draft" name="draft" domain="[('contract_type', '=', 'new_contract')]"/>
                 <filter string="Running" name="running" domain="[('contract_type', '=', 'running_contract')]"/>
                 <filter string="Expiring Soon" name="expiring_soon"
-                        domain="[('contract_type', '=', 'running_contract'), ('end_date', '&gt;=', context_today()), ('end_date', '&lt;=', (context_today() + datetime.timedelta(days=30)).strftime('%Y-%m-%d'))]"/>
+                        domain="[('contract_type', '=', 'running_contract'), ('end_date', '&gt;=', context_today()), ('end_date', '&lt;=', (context_today() + relativedelta(days=30)).strftime('%Y-%m-%d'))]"/>
                 <filter string="Expired" name="expired" domain="[('contract_type', '=', 'expire_contract')]"/>
                 <filter string="Closed" name="closed" domain="[('contract_type', '=', 'close_contract')]"/>
                 <filter string="Cancelled" name="cancelled" domain="[('contract_type', '=', 'cancel_contract')]"/>
@@ -372,7 +372,7 @@
                 <filter string="With Overdue Invoices" name="overdue"
                         domain="[('rent_invoice_ids.rent_invoice_id.amount_residual', '&gt;', 0), ('rent_invoice_ids.rent_invoice_id.invoice_date_due', '&lt;', context_today())]"/>
                 <filter string="Without Invoice" name="without_invoice" domain="[('rent_invoice_ids', '=', False)]"/>
-                <group expand="0" string="Group By">
+                <group>
                     <filter string="Status" name="group_status" context="{'group_by': 'contract_type'}"/>
                     <filter string="Property" name="group_property" context="{'group_by': 'property_id'}"/>
                     <filter string="Tenant" name="group_tenant" context="{'group_by': 'tenancy_id'}"/>
