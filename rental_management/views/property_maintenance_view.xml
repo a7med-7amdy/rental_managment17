@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data>
+        <record id="property_maintenance_inherit_view" model="ir.ui.view">
+            <field name="name">property.maintenance.inherit.view</field>
+            <field name="model">maintenance.request</field>
+            <field name="inherit_id" ref="maintenance.hr_equipment_request_view_form" />
+            <field name="arch" type="xml">
+                <xpath expr="//field[@name='equipment_id']" position="before">
+                    <field name="invoice_state" invisible="1" />
+                    <field name="property_id" />
+                    <field name="company_id" invisible="1" />
+                    <field name="currency_id" invisible="1" />
+                    <field name="invoice_id" readonly="1" invisible="not invoice_state" />
+                    <field name="maintenance_type_id" />
+                </xpath>
+                <xpath expr="//field[@name='maintenance_team_id']" position="after">
+                    <field name="landlord_id" />
+                </xpath>
+                <xpath expr="//header" position="inside">
+                    <field name="invoice_state" invisible="1" />
+                    <button string="Create Invoice" name="action_crete_invoice" type="object" invisible="invoice_state"/>
+                </xpath>
+            </field>
+        </record>
+        <record id="property_maintenance_action" model="ir.actions.act_window">
+            <field name="name">Requests</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">maintenance.request</field>
+            <field name="view_mode">tree,form,activity</field>
+        </record>
+        <record id="maintenace_invoice_action" model="ir.actions.act_window">
+            <field name="name">Maintenance Invoices</field>
+            <field name="type">ir.actions.act_window</field>
+            <field name="res_model">account.move</field>
+            <field name="view_mode">tree,form,kanban,activity</field>
+            <field name="domain">[('maintenance_request_id', '!=', False)]</field>
+            <field name="context">{'create':False}</field>
+        </record>
+    </data>
+</odoo>
