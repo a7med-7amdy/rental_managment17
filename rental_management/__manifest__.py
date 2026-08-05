@@ -16,13 +16,13 @@
     'summary': """
         Property Sale & Rental Management
     """,
-    'version': '19.0.1.0.0',
+    'version': '19.0.1.0.1',
     'author': 'TechKhedut Inc.',
     'company': 'TechKhedut Inc.',
     'maintainer': 'TechKhedut Inc.',
     'website': "https://www.techkhedut.com",
     'category': 'Services',
-    'depends': ['mail', 'contacts', 'account', 'hr', 'maintenance', 'crm', 'website', 'portal'],
+    'depends': ['mail', 'contacts', 'account', 'hr', 'maintenance', 'crm', 'website', 'html_editor', 'portal'],
     'data': [
         # security
         'security/groups.xml',

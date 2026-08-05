@@ -10,6 +10,23 @@ This report distinguishes between:
 
 No runtime success is claimed.
 
+
+## 1.1 Odoo.sh Runtime Attempt and Import Hotfix
+
+An actual Odoo.sh module load was attempted on **2026-08-05**. The initial `19.0.1.0.0` package failed before registry initialization with:
+
+```text
+ModuleNotFoundError: No module named 'odoo.addons.web_editor'
+```
+
+The failure occurred in three model files that imported video helpers from the pre-Odoo-19 addon path. Version **19.0.1.0.1** applies the following hotfix:
+
+- `odoo.addons.web_editor.tools` → `odoo.addons.html_editor.tools`
+- Adds `html_editor` to manifest dependencies.
+- Re-runs Python, XML, JavaScript, manifest-reference, and package-integrity checks.
+
+The corrected `19.0.1.0.1` package has **not yet been loaded on Odoo.sh** in this workspace, so clean-install and upgrade success are still pending the next staging build.
+
 ## 2. Validation Environment
 
 | Component | Version / Result |

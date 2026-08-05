@@ -8,7 +8,7 @@ from odoo import api, fields, models, tools, _
 from odoo.exceptions import UserError, ValidationError
 
 _logger = logging.getLogger(__name__)
-from odoo.addons.web_editor.tools import get_video_embed_code, get_video_thumbnail
+from odoo.addons.html_editor.tools import get_video_embed_code, get_video_thumbnail
 
 
 class PropertyDetails(models.Model):
@@ -1144,7 +1144,7 @@ class FloorPlan(models.Model):
                 raise ValidationError(
                     _(
                         "Provided video URL for '%s' is not valid. Please enter a valid video URL.",
-                        image.name,
+                        image.display_name,
                     )
                 )
 
@@ -1194,7 +1194,7 @@ class PropertyImages(models.Model):
                 raise ValidationError(
                     _(
                         "Provided video URL for '%s' is not valid. Please enter a valid video URL.",
-                        image.name,
+                        image.display_name,
                     )
                 )
 

@@ -4,7 +4,7 @@
 import base64
 from odoo import api, fields, models, tools, _
 from odoo.exceptions import ValidationError
-from odoo.addons.web_editor.tools import get_video_embed_code, get_video_thumbnail
+from odoo.addons.html_editor.tools import get_video_embed_code, get_video_thumbnail
 
 
 class PropertyProject(models.Model):
@@ -446,6 +446,6 @@ class ProjectImagesLine(models.Model):
                 raise ValidationError(
                     _(
                         "Provided video URL for '%s' is not valid. Please enter a valid video URL.",
-                        image.name,
+                        image.display_name,
                     )
                 )

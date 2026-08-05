@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-These notes apply when upgrading an existing database containing `rental_management` data to module version `19.0.1.0.0`.
+These notes apply when upgrading an existing database containing `rental_management` data to module version `19.0.1.0.1`.
 
 The migration is conservative: it preserves historical records and reports anomalies rather than deleting or silently rewriting business history.
 

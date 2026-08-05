@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-The `rental_management` module was structurally upgraded from version **3.1.1** to **19.0.1.0.0** while retaining:
+The `rental_management` module was structurally upgraded from version **3.1.1** to **19.0.1.0.1** while retaining:
 
 - Technical module name: `rental_management`
 - Original author: `TechKhedut Inc.`
@@ -17,7 +17,7 @@ The upgrade focused on Odoo 19 compatibility, rental lifecycle visibility, accou
 | Item | Value |
 |---|---|
 | Original module version | `3.1.1` |
-| Final module version | `19.0.1.0.0` |
+| Final module version | `19.0.1.0.1` |
 | Target platform | Odoo 19 Enterprise |
 | Technical name | `rental_management` |
 | Author | TechKhedut Inc. |
@@ -28,6 +28,9 @@ The upgrade focused on Odoo 19 compatibility, rental lifecycle visibility, accou
 
 ### 3.1 Odoo 19 framework compatibility
 
+- Replaced the removed Odoo 19 import path `odoo.addons.web_editor.tools` with `odoo.addons.html_editor.tools` for video embed and thumbnail helpers.
+- Declared `html_editor` as an explicit dependency because the module imports its Python API directly.
+- Corrected invalid-video validation messages to use `display_name` rather than assuming image-line records contain a `name` field.
 - Replaced legacy `<tree>` architecture with Odoo 19 `<list>` architecture.
 - Updated action `view_mode` values from `tree` to `list`.
 - Removed legacy `attrs` and `states` usage.
