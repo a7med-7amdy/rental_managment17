@@ -36,8 +36,8 @@ class ContractWizard(models.TransientModel):
     )
     rent_unit = fields.Selection(related="property_id.rent_unit")
     total_rent = fields.Monetary(related="property_id.price", string="Rent", readonly=False)
-    is_extra_service = fields.Boolean(related="property_id.is_extra_service")
-    services = fields.Text(string="Utility Services", compute="_compute_services", translate=True)
+    is_extra_service = fields.Boolean(related="property_id.is_extra_service", string="Has Utility Services")
+    services = fields.Text(string="Utility Service Summary", compute="_compute_services", translate=True)
     is_any_maintenance = fields.Boolean(related="property_id.is_maintenance_service")
     maintenance_rent_type = fields.Selection(related="property_id.maintenance_rent_type")
     total_maintenance = fields.Monetary(related="property_id.total_maintenance")
@@ -53,7 +53,7 @@ class ContractWizard(models.TransientModel):
         required=True,
         default="monthly",
     )
-    duration_ids = fields.Many2many("contract.duration", compute="compute_durations")
+    duration_ids = fields.Many2many("contract.duration", string="Allowed Durations", compute="compute_durations")
     duration_id = fields.Many2one(
         "contract.duration", string="Duration", required=True, domain="[('id', 'in', duration_ids)]"
     )

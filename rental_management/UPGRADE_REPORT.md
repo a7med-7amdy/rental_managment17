@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-The `rental_management` module was structurally upgraded from version **3.1.1** to **19.0.1.0.1** while retaining:
+The `rental_management` module was structurally upgraded from version **3.1.1** to **19.0.1.0.2** while retaining:
 
 - Technical module name: `rental_management`
 - Original author: `TechKhedut Inc.`
@@ -17,7 +17,7 @@ The upgrade focused on Odoo 19 compatibility, rental lifecycle visibility, accou
 | Item | Value |
 |---|---|
 | Original module version | `3.1.1` |
-| Final module version | `19.0.1.0.1` |
+| Final module version | `19.0.1.0.2` |
 | Target platform | Odoo 19 Enterprise |
 | Technical name | `rental_management` |
 | Author | TechKhedut Inc. |
@@ -468,3 +468,11 @@ Static validation completed successfully for:
 - Compiled/temporary file cleanup.
 
 Runtime acceptance remains subject to executing the clean-install and upgrade commands documented in `TEST_REPORT.md` on an actual Odoo 19 Enterprise environment.
+
+
+## Registry Hotfix 19.0.1.0.2
+
+- Normalized the manifest description to avoid reStructuredText parser warnings.
+- Removed duplicate display labels reported during Odoo model reflection.
+- Replaced legacy-hostile SQL checks with Python validation and an upgrade-safe migration.
+- Added `migrations/19.0.1.0.2/` without changing technical fields or business data.

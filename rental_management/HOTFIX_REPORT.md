@@ -1,44 +1,66 @@
-# rental_management Odoo 19 Import Hotfix
+# rental_management Odoo 19 Registry Hotfix
 
 ## Package
 
-- Previous version: `19.0.1.0.0`
-- Corrected version: `19.0.1.0.1`
+- Previous package: `19.0.1.0.1`
+- Corrected package: `19.0.1.0.2`
 - Date: `2026-08-05`
 
-## Runtime Failure
+## Runtime Evidence Received
 
-The Odoo.sh registry stopped while importing `models/property_details.py`:
+The second Odoo.sh attempt passed the previous `web_editor` import failure and reached model registration. The supplied log then showed:
+
+- reStructuredText parser warnings (`Unexpected indentation`).
+- six duplicate field-label warnings.
+- `Failed to load registry` without the subsequent exception traceback.
+
+The duplicate-label messages are warnings; the supplied excerpt does not include the fatal exception that followed registry failure. This hotfix therefore addresses every visible issue and also removes a schema constraint that could reject valid legacy draft/history data during upgrade.
+
+## Changes
+
+### Manifest description
+
+Replaced the indented bullet-list manifest description with a plain valid description and summary. This avoids module-description parser warnings without changing functionality.
+
+### Duplicate field labels
+
+Changed display labels only; technical field names and stored data are unchanged:
+
+- `res.partner.properties_ids`: `Rental Properties`.
+- `tenancy.details.commission`: `Calculated Broker Commission`.
+- `tenancy.details.broker_commission`: `Fixed Broker Commission`.
+- `crm.lead.sale_lease`: `Selected Property For`.
+- `crm.lead.domain_sale_lease`: `Requested Property For`.
+- `crm.lead.price`: `Selected Property Price`.
+- `crm.lead.property_price`: `Requested Property Price`.
+- `contract.wizard.is_extra_service`: `Has Utility Services`.
+- `contract.wizard.services`: `Utility Service Summary`.
+- `contract.wizard.duration_ids`: `Allowed Durations`.
+
+### Upgrade-safe SQL validation
+
+Removed strict SQL `CHECK` declarations from legacy business tables where pre-existing draft/history records can legitimately contain incomplete values. Equivalent business validation remains in Python when records are edited and when a contract is activated.
+
+Added:
 
 ```text
-ModuleNotFoundError: No module named 'odoo.addons.web_editor'
+migrations/19.0.1.0.2/pre-migration.py
+migrations/19.0.1.0.2/post-migration.py
 ```
 
-## Root Cause
+The pre-migration drops only the obsolete named constraints if present. It does not delete or rewrite any property, contract, invoice, payment, or accounting entry. The post-migration logs incomplete legacy contracts for manual review.
 
-Odoo 19 no longer provides the Python package `odoo.addons.web_editor`. The video helper functions used by the module are available from `odoo.addons.html_editor.tools`.
+## Validation Executed
 
-## Files Corrected
+- Python compilation: passed for 45 files.
+- XML parsing: passed for 56 files.
+- JavaScript syntax: passed.
+- Manifest data and asset references: passed.
+- CSV shape validation: passed.
+- Duplicate explicit labels within custom models: none detected.
+- Obsolete `web_editor` imports: none detected.
+- Old `<tree>`, `attrs=`, and `states=` architecture: none detected.
 
-- `__manifest__.py`
-- `models/property_details.py`
-- `models/property_project.py`
-- `models/property_sub_project.py`
-- `UPGRADE_REPORT.md`
-- `TEST_REPORT.md`
+## Runtime Limitation
 
-## Technical Changes
-
-1. Replaced all three obsolete imports with:
-
-```python
-from odoo.addons.html_editor.tools import get_video_embed_code, get_video_thumbnail
-```
-
-2. Added `html_editor` as an explicit manifest dependency.
-3. Bumped the module version to `19.0.1.0.1`.
-4. Corrected invalid-video errors to use `display_name` instead of an undefined `name` field on image-line models.
-
-## Validation Status
-
-The corrected package passed the static checks documented in `TEST_REPORT.md`. It still requires a new Odoo.sh staging build to confirm the next runtime load stage.
+No Odoo 19 runtime exists in this workspace. The corrected package must be rebuilt on Odoo.sh. If the registry still fails, the complete traceback immediately after `Failed to load registry` is required; warnings alone do not identify the fatal exception.

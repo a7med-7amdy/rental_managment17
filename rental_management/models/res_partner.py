@@ -12,7 +12,7 @@ class UserTypes(models.Model):
                                   ('broker', 'Broker')],
                                  string='User Type')
     properties_count = fields.Integer(string='Properties Count', compute='_compute_properties_count')
-    properties_ids = fields.One2many('property.details', 'landlord_id', string='Properties')
+    properties_ids = fields.One2many('property.details', 'landlord_id', string='Rental Properties')
     brokerage_company_id = fields.Many2one('res.company', string=' Brokerage Company',
                                            default=lambda self: self.env.company)
     currency_id = fields.Many2one('res.currency', related='brokerage_company_id.currency_id',

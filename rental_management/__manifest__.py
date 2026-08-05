@@ -3,20 +3,12 @@
 # Part of TechKhedut. See LICENSE file for full copyright and licensing details.
 {
     'name': "Advanced Property Sale & Rental Management | Real Estate | Property Sales | Property Rental | Property Management",
-    'description': """
-        - Property Sale
-        - Property Rental
-        - Lease Contract
-        - Landlord Management
-        - Customer Management
-        - Property Maintenance
-        - Customer Recurring Invoice
-        - Property List
-    """,
-    'summary': """
-        Property Sale & Rental Management
-    """,
-    'version': '19.0.1.0.1',
+    'description': (
+        'Manage property sales, rentals, lease contracts, landlords, tenants, '
+        'maintenance, recurring invoices, commissions, and customer portal workflows.'
+    ),
+    'summary': 'Property Sale and Rental Management',
+    'version': '19.0.1.0.2',
     'author': 'TechKhedut Inc.',
     'company': 'TechKhedut Inc.',
     'maintainer': 'TechKhedut Inc.',

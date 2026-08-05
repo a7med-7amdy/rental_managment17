@@ -209,7 +209,7 @@ class TenancyDetails(models.Model):
     broker_id = fields.Many2one(
         "res.partner", string="Broker", domain="[('user_type', '=', 'broker')]", tracking=True
     )
-    commission = fields.Monetary(string="Commission", compute="_compute_broker_commission", store=True)
+    commission = fields.Monetary(string="Calculated Broker Commission", compute="_compute_broker_commission", store=True)
     rent_type = fields.Selection(
         [("once", "One Period"), ("e_rent", "All Contract Periods")],
         string="Brokerage Type",
@@ -217,7 +217,7 @@ class TenancyDetails(models.Model):
     commission_type = fields.Selection(
         [("f", "Fixed"), ("p", "Percentage")], string="Commission Type"
     )
-    broker_commission = fields.Monetary(string="Commission")
+    broker_commission = fields.Monetary(string="Fixed Broker Commission")
     broker_commission_percentage = fields.Float(string="Percentage")
     commission_from = fields.Selection(
         [("customer", "Tenant"), ("landlord", "Landlord"), ("both", "Tenant and Landlord")],
@@ -282,17 +282,6 @@ class TenancyDetails(models.Model):
     accounting_invoice_count = fields.Integer(compute="_compute_related_counts")
     maintenance_count = fields.Integer(compute="_compute_related_counts")
     document_count = fields.Integer(compute="_compute_related_counts")
-
-    _rent_positive = models.Constraint(
-        "CHECK(total_rent > 0)", "Rent amount must be greater than zero."
-    )
-    _deposit_non_negative = models.Constraint(
-        "CHECK(deposit_amount >= 0)", "Security deposit cannot be negative."
-    )
-    _broker_values_non_negative = models.Constraint(
-        "CHECK(broker_commission >= 0 AND broker_commission_percentage >= 0)",
-        "Broker commission values cannot be negative.",
-    )
 
     @api.model
     def _expand_contract_states(self, states, domain):
@@ -1307,9 +1296,11 @@ class ContractDuration(models.Model):
         string="Rent Unit",
     )
 
-    _duration_positive = models.Constraint(
-        "CHECK(month > 0)", "Duration must be greater than zero."
-    )
+    @api.constrains("month")
+    def _check_positive_duration(self):
+        for duration in self:
+            if duration.month <= 0:
+                raise ValidationError(_("Duration must be greater than zero."))
 
 
 class TenancyExtraServiceLine(models.Model):
@@ -1334,9 +1325,11 @@ class TenancyExtraServiceLine(models.Model):
     company_id = fields.Many2one(related="tenancy_id.company_id", store=True, index=True)
     from_contract = fields.Boolean(copy=False)
 
-    _service_price_non_negative = models.Constraint(
-        "CHECK(price >= 0)", "Service price cannot be negative."
-    )
+    @api.constrains("price")
+    def _check_non_negative_service_price(self):
+        for service in self:
+            if service.price < 0:
+                raise ValidationError(_("Service price cannot be negative."))
 
     @api.onchange("service_id")
     def _onchange_service_id_price(self):

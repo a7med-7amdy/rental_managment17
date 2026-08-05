@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-These notes apply when upgrading an existing database containing `rental_management` data to module version `19.0.1.0.1`.
+These notes apply when upgrading an existing database containing `rental_management` data to module version `19.0.1.0.2`.
 
 The migration is conservative: it preserves historical records and reports anomalies rather than deleting or silently rewriting business history.
 
@@ -36,7 +36,10 @@ Odoo.sh users should create a staging branch/build and a database duplicate befo
 
 ```text
 migrations/
-└── 19.0.1.0.0/
+├── 19.0.1.0.0/
+│   ├── pre-migration.py
+│   └── post-migration.py
+└── 19.0.1.0.2/
     ├── pre-migration.py
     └── post-migration.py
 ```
@@ -233,3 +236,16 @@ Do not attempt to partially reverse schema/data changes manually on the only pro
 - Do not delete conflicting contracts before business approval.
 - Do not disable global company rules to bypass access errors; correct the company ownership data instead.
 - Run the lifecycle cron twice in staging and confirm no duplicate invoice is produced.
+
+
+## 10. Registry Hotfix Migration 19.0.1.0.2
+
+The `19.0.1.0.2` pre-migration checks for and drops only these obsolete constraints if they exist:
+
+- `tenancy_details_rent_positive`
+- `tenancy_details_deposit_non_negative`
+- `tenancy_details_broker_values_non_negative`
+- `contract_duration_duration_positive`
+- `tenancy_service_line_service_price_non_negative`
+
+They were removed because an existing database can contain valid incomplete draft or historical rows. Business validation continues in Python on record changes and contract activation. No rows are deleted or rewritten.

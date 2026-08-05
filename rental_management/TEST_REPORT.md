@@ -19,13 +19,13 @@ An actual Odoo.sh module load was attempted on **2026-08-05**. The initial `19.0
 ModuleNotFoundError: No module named 'odoo.addons.web_editor'
 ```
 
-The failure occurred in three model files that imported video helpers from the pre-Odoo-19 addon path. Version **19.0.1.0.1** applies the following hotfix:
+The failure occurred in three model files that imported video helpers from the pre-Odoo-19 addon path. Version **19.0.1.0.1** applied the following hotfix:
 
 - `odoo.addons.web_editor.tools` → `odoo.addons.html_editor.tools`
 - Adds `html_editor` to manifest dependencies.
 - Re-runs Python, XML, JavaScript, manifest-reference, and package-integrity checks.
 
-The corrected `19.0.1.0.1` package has **not yet been loaded on Odoo.sh** in this workspace, so clean-install and upgrade success are still pending the next staging build.
+A second Odoo.sh attempt reached model reflection and exposed manifest-description and duplicate-label warnings, followed by a registry failure whose fatal traceback was not included in the supplied excerpt. Version `19.0.1.0.2` addresses every visible warning and removes strict SQL checks that could reject incomplete legacy draft/history records during upgrade. Runtime acceptance remains pending another Odoo.sh build.
 
 ## 2. Validation Environment
 
@@ -50,7 +50,7 @@ Executed against every Python source file, including models, controllers, wizard
 Result:
 
 ```text
-Python files checked: 43
+Python files checked: 45
 Syntax/compile errors: 0
 ```
 
@@ -285,3 +285,21 @@ Before production deployment, verify on Odoo 19 Enterprise:
 ## 8. Conclusion
 
 All executable static checks passed. Runtime installation, upgrade, and Odoo automated-test results remain pending because no Odoo 19 runtime was available in the workspace.
+
+
+## 9. Static Validation for 19.0.1.0.2
+
+Executed after applying the registry hotfix:
+
+```text
+Python files compiled: 45 / 45
+XML files parsed: 56 / 56
+JavaScript files checked: passed
+Manifest data/assets missing: 0
+CSV row-shape errors: 0
+Duplicate explicit custom-model labels: 0
+Obsolete web_editor imports: 0
+Old tree/attrs/states patterns: 0
+```
+
+The Odoo 19 clean-install and upgrade commands were not executed locally because `odoo-bin`, PostgreSQL, and Odoo 19 Enterprise are not available in this workspace.

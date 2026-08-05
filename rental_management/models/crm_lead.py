@@ -9,8 +9,8 @@ class PropertyInquiry(models.Model):
 
     property_id = fields.Many2one('property.details', string='Property',
                                   domain="['|',('stage','=','available'),('stage','=','sale')]")
-    sale_lease = fields.Selection(related='property_id.sale_lease')
-    price = fields.Monetary(related="property_id.price")
+    sale_lease = fields.Selection(related='property_id.sale_lease', string='Selected Property For')
+    price = fields.Monetary(related="property_id.price", string="Selected Property Price")
 
     # For sale
     company_id = fields.Many2one('res.company',
@@ -39,7 +39,7 @@ class PropertyInquiry(models.Model):
                                           domain="[('type','=',property_type)]")
     total_area = fields.Float(string="Total Area")
     usable_area = fields.Float(string="Usable Area")
-    property_price = fields.Monetary(string="Price")
+    property_price = fields.Monetary(string="Requested Property Price")
     rent_unit = fields.Selection([('Day', "Day"),
                                   ('Month', "Month"),
                                   ('Year', "Year")],
@@ -52,7 +52,7 @@ class PropertyInquiry(models.Model):
     domain_sale_lease = fields.Selection([
         # ('for_sale', 'Sale'),
         ('for_tenancy', 'Rent')],
-        string='Property For',
+        string='Requested Property For',
         default='for_tenancy',
         required=True)
     price_per_area = fields.Monetary(string="Price / Area")
