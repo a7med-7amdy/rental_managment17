@@ -1,5 +1,5 @@
 from odoo import Command
-from odoo.exceptions import AccessError, ValidationError
+from odoo.exceptions import UserError, ValidationError
 from odoo.tests import tagged
 from odoo.tests.common import new_test_user
 
@@ -30,8 +30,17 @@ class TestRentalMultiCompany(RentalCommon):
     def test_cross_company_contract_is_rejected(self):
         values = self._contract_values(property_id=self.property_b)
         values["company_id"] = self.env.company.id
-        with self.assertRaises((ValidationError, AccessError)):
-            self.env["tenancy.details"].create(values)
+        rejected = False
+        try:
+            self.env["tenancy.details"].with_context(
+                allowed_company_ids=(self.env.company | self.company_b).ids
+            ).create(values)
+        except (UserError, ValidationError):
+            rejected = True
+        self.assertTrue(
+            rejected,
+            "A rental contract cannot link a property from another company.",
+        )
 
     def test_dashboard_respects_allowed_companies(self):
         stats = self.env["property.details"].with_user(self.user_a).get_property_stats()

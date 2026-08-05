@@ -672,24 +672,27 @@ class TenancyDetails(models.Model):
         properties = self.mapped("property_id")
         if not properties:
             return
-        grouped = self._read_group(
-            [
-                ("property_id", "in", properties.ids),
-                ("contract_type", "=", "running_contract"),
-                ("end_date", ">=", today),
-            ],
-            ["property_id", "start_date"],
+        base_domain = [
+            ("property_id", "in", properties.ids),
+            ("contract_type", "=", "running_contract"),
+            ("end_date", ">=", today),
+        ]
+        current_groups = self._read_group(
+            base_domain + [("start_date", "<=", today)],
+            ["property_id"],
             ["__count"],
         )
-        current_property_ids = set()
-        future_property_ids = set()
-        for property_rec, start_date, _count in grouped:
-            if not property_rec:
-                continue
-            if start_date and start_date <= today:
-                current_property_ids.add(property_rec.id)
-            else:
-                future_property_ids.add(property_rec.id)
+        future_groups = self._read_group(
+            base_domain + [("start_date", ">", today)],
+            ["property_id"],
+            ["__count"],
+        )
+        current_property_ids = {
+            property_rec.id for property_rec, _count in current_groups if property_rec
+        }
+        future_property_ids = {
+            property_rec.id for property_rec, _count in future_groups if property_rec
+        }
         for property_rec in properties:
             target_stage = (
                 "on_lease"
@@ -709,7 +712,10 @@ class TenancyDetails(models.Model):
         for contract in self:
             activities = contract.activity_ids.filtered(lambda activity: activity.active)
             if activities:
-                activities.action_feedback(feedback=feedback)
+                # Closing/cancelling is manager-only. Elevate only the activity
+                # completion so a manager can finish activities assigned to another
+                # responsible user without receiving broad accounting access.
+                activities.sudo().action_feedback(feedback=feedback)
 
     def _schedule_expiry_activity(self):
         activity_type = self.env.ref("mail.mail_activity_data_todo", raise_if_not_found=False)
