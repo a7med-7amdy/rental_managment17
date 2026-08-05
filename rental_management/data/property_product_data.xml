@@ -3,31 +3,31 @@
     <!--Payment Product-->
     <data noupdate="1">
         <record id="product_category_property" model="product.category">
-            <field name="parent_id" ref="product.product_category_all" />
+            <field name="parent_id" ref="product.product_category_services" />
             <field name="name">Property</field>
         </record>
         <record id="property_product_1" model="product.product">
             <field name="name">Property Payment</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="categ_id" ref="rental_management.product_category_property" />
         </record>
         <record id="property_product_2" model="product.product">
             <field name="name">Property Deposit</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="categ_id" ref="rental_management.product_category_property" />
         </record>
         <!--Maintenance
         Product-->
         <record id="property_maintenance_product_1" model="product.product">
             <field name="name">Electrical System Repairs</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="description">Only Stock Electrical item will be covered</field>
             <field name="is_maintenance">True</field>
             <field name="categ_id" ref="rental_management.product_category_property" />
         </record>
         <record id="property_maintenance_product_2" model="product.product">
             <field name="name">Structural Repairs</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="description">including severe damage to walls, ceiling, or floors, or Paint
                 related Work
             </field>
@@ -36,21 +36,21 @@
         </record>
         <record id="property_maintenance_product_3" model="product.product">
             <field name="name">Plumbing System Repairs</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="description">plumbing related Services will be covered</field>
             <field name="is_maintenance">True</field>
             <field name="categ_id" ref="rental_management.product_category_property" />
         </record>
         <record id="property_maintenance_product_4" model="product.product">
             <field name="name">Mold Found</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="description">Mold Related all Service</field>
             <field name="is_maintenance">True</field>
             <field name="categ_id" ref="rental_management.product_category_property" />
         </record>
         <record id="property_maintenance_product_5" model="product.product">
             <field name="name">Other</field>
-            <field name="detailed_type">service</field>
+            <field name="type">service</field>
             <field name="description">Any Other Maintenance</field>
             <field name="is_maintenance">True</field>
             <field name="categ_id" ref="rental_management.product_category_property" />
