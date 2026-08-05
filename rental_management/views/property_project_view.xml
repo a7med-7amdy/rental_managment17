@@ -236,7 +236,7 @@
                                     <field name="image" />
                                     <field name="title" />
                                     <templates>
-                                        <t t-name="kanban-box">
+                                        <t t-name="card">
                                             <div class="oe_kanban_global_click text-center"
                                                 style="border:0; padding:0; margin:0; ">
                                                 <p>
@@ -283,7 +283,7 @@
                                     <field name="description" />
                                     <field name="image" />
                                     <templates>
-                                        <t t-name="kanban-box">
+                                        <t t-name="card">
                                             <div class="oe_kanban_global_click mx-2"
                                                 style="border:0; margin:0; padding:0; ">
                                                 <div class="row justify-content-center">
@@ -374,7 +374,7 @@
                                     <field name="image" />
                                     <field name="sequence" widget="handle" />
                                     <templates>
-                                        <t t-name="kanban-box">
+                                        <t t-name="card">
                                             <div
                                                 class="card oe_kanban_global_click p-0 border-0">
                                                 <div class="row">
@@ -454,7 +454,7 @@
                                     <field name="image" />
                                     <field name="connectivity_id" />
                                     <templates>
-                                        <t t-name="kanban-box">
+                                        <t t-name="card">
                                             <div
                                                 class="oe_kanban_global_click border-bottom rounded"
                                                 style="width: 343px; height: auto;border: 0px; border-bottom: none !important;">
@@ -507,7 +507,7 @@
         <field name="name">property.project.view.tree</field>
         <field name="model">property.project</field>
         <field name="arch" type="xml">
-            <tree string="Property Projects" sample="1">
+            <list string="Property Projects" sample="1">
                 <field name="project_sequence" string="Code" />
                 <field name="name" />
                 <field name="date_of_project" optional="hide" />
@@ -520,7 +520,7 @@
                 <field name="is_sub_project" optional="hide" />
                 <field name="status" widget="badge" decoration-success="status == 'available'"
                     decoration-info="status == 'draft'" />
-            </tree>
+            </list>
         </field>
     </record>
     <record id="property_project_view_activity" model="ir.ui.view">
@@ -620,7 +620,7 @@
         <field name="name">Projects</field>
         <field name="type">ir.actions.act_window</field>
         <field name="res_model">property.project</field>
-        <field name="view_mode">tree,activity,form</field>
+        <field name="view_mode">list,activity,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
                 Create New Projects

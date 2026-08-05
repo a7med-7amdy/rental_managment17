@@ -19,15 +19,25 @@ class PropertyRegion(models.Model):
                                 compute="compute_count")
 
     def compute_count(self):
-        for rec in self:
-            rec.project_count = self.env['property.project'].search_count(
-                [('region_id', '=', rec.id)])
-            rec.subproject_count = self.env['property.sub.project'].search_count(
-                [('region_id', '=', rec.id)])
-            rec.unit_count = self.env['property.details'].search_count(
-                [('region_id', '=', rec.id)])
+        project_groups = self.env["property.project"]._read_group(
+            [("region_id", "in", self.ids)], ["region_id"], ["__count"]
+        ) if self.ids else []
+        subproject_groups = self.env["property.sub.project"]._read_group(
+            [("region_id", "in", self.ids)], ["region_id"], ["__count"]
+        ) if self.ids else []
+        unit_groups = self.env["property.details"]._read_group(
+            [("region_id", "in", self.ids)], ["region_id"], ["__count"]
+        ) if self.ids else []
+        project_map = {region.id: count for region, count in project_groups}
+        subproject_map = {region.id: count for region, count in subproject_groups}
+        unit_map = {region.id: count for region, count in unit_groups}
+        for region in self:
+            region.project_count = project_map.get(region.id, 0)
+            region.subproject_count = subproject_map.get(region.id, 0)
+            region.unit_count = unit_map.get(region.id, 0)
 
     def action_view_project(self):
+        self.ensure_one()
         return {
             "name": "Projects",
             "type": "ir.actions.act_window",
@@ -39,6 +49,7 @@ class PropertyRegion(models.Model):
         }
 
     def action_view_sub_project(self):
+        self.ensure_one()
         return {
             "name": "Sub Projects",
             "type": "ir.actions.act_window",
@@ -50,6 +61,7 @@ class PropertyRegion(models.Model):
         }
 
     def action_view_properties(self):
+        self.ensure_one()
         return {
             "name": "Units",
             "type": "ir.actions.act_window",

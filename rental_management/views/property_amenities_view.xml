@@ -22,10 +22,10 @@
             <field name="name">property.amenities.tree.view</field>
             <field name="model">property.amenities</field>
             <field name="arch" type="xml">
-                <tree>
+                <list>
                     <field name="sequence" widget="handle"/>
                     <field name="title" />
-                </tree>
+                </list>
             </field>
         </record>
         <record id="property_amenities_kanban_view" model="ir.ui.view">
@@ -37,7 +37,7 @@
                     <field name="title" />
                     <field name="image" />
                     <templates>
-                        <t t-name="kanban-box">
+                        <t t-name="card">
                             <div
                                 class="oe_kanban_global_click o_kanban_record_has_image_fill o_res_partner_kanban">
                                 <t t-if="record.image.raw_value">
@@ -70,7 +70,7 @@
             <field name="name">Property Amenities</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">property.amenities</field>
-            <field name="view_mode">kanban,tree,form</field>
+            <field name="view_mode">kanban,list,form</field>
         </record>
     </data>
 </odoo>

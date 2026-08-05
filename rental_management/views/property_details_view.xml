@@ -8,15 +8,29 @@
                 <form string="Property">
                     <header>
                         <field name="sold_booking_id" invisible="1" />
-                        <field name="stage" widget="statusbar" statusbar_visible="draft,available"
-                            nolabel="1" />
-                        <button name="%(contract_wizard_action)d" type='action'
-                            string="Create Contract" class="btn btn-success" icon="fa-money"
-                            invisible="stage != 'available' or sale_lease != 'for_tenancy'" />
+                        <field name="stage" widget="statusbar"
+                            statusbar_visible="draft,available,booked,on_lease"
+                            invisible="sale_lease != 'for_tenancy'"/>
+                        <field name="stage" widget="statusbar"
+                            statusbar_visible="draft,available,sale,sold"
+                            invisible="sale_lease != 'for_sale'"/>
+                        <button name="%(contract_wizard_action)d" type="action"
+                            string="Create Rental Contract" class="oe_highlight" icon="fa-file-text-o"
+                            invisible="stage != 'available' or sale_lease != 'for_tenancy'"
+                            groups="rental_management.property_rental_officer"/>
+                        <button name="action_view_active_contract" type="object"
+                            string="View Active Contract" class="btn-secondary"
+                            invisible="stage not in ['booked', 'on_lease']"/>
+                        <button name="action_maintenance_request" type="object"
+                            string="Maintenance Requests" invisible="stage != 'on_lease'"/>
+                        <button name="action_view_rent_invoices" type="object"
+                            string="View Invoices" invisible="stage != 'on_lease'"/>
+                        <button name="action_property_document" type="object"
+                            string="View Documents" invisible="stage != 'on_lease'"/>
                         <button name="%(booking_wizard_action)d" type='action'
                             string="Create Booking" class="btn btn-success"
                             invisible="stage not in ['sale'] or sold_booking_id" />
-                        <button name="action_in_available" type="object" string="Available"
+                        <button name="action_in_available" type="object" string="Make Available"
                             class="btn-info"
                             invisible="stage not in ['draft']" />
                         <button name="action_in_sale" type="object" string="Sale" class="btn-info"
@@ -28,6 +42,9 @@
                             class="btn btn-primary" invisible="stage not in ['available','sale']" />
                     </header>
                     <sheet>
+                        <widget name="web_ribbon" title="Rented" bg_color="bg-success" invisible="stage != 'on_lease'"/>
+                        <widget name="web_ribbon" title="Reserved" bg_color="bg-info" invisible="stage != 'booked'"/>
+                        <widget name="web_ribbon" title="Sold" bg_color="bg-danger" invisible="stage != 'sold'"/>
                         <div class="oe_button_box" name="button_box">
                             <button class="oe_stat_button" type="object" name="action_sale_booking"
                                 icon="fa-folder"
@@ -97,6 +114,7 @@
                                         options="{'no_open':True,'no_create':True,'no_create_edit':True}" />
                                 </div>
                                 <field name="company_id" />
+                                <field name="responsible_id" widget="many2one_avatar_user"/>
                             </group>
                             <group>
                                 <field name="sale_lease" widget="radio"
@@ -193,7 +211,7 @@
                                 </div>
                                 <field name="room_measurement_ids"
                                     invisible="not is_section_measurement">
-                                    <tree editable="bottom">
+                                    <list editable="bottom">
                                         <field name="section_id" required="1" />
                                         <field name="type_room" column_invisible="1" />
                                         <field name="no_of_unit" />
@@ -208,7 +226,7 @@
                                         <field name="cu_ft" column_invisible="1" />
                                         <field name="cu_m" column_invisible="1" />
                                         <field name="measure" nolabel="1" column_invisible="1" />
-                                    </tree>
+                                    </list>
                                 </field>
                                 <group>
                                     <group string="Area Calculations">
@@ -328,14 +346,14 @@
                                     <group invisible="not is_extra_service">
                                         <field name="extra_service_ids" string="Services"
                                             required="is_extra_service">
-                                            <tree editable="bottom">
+                                            <list editable="bottom">
                                                 <field name="service_id" required="1" />
                                                 <field name="service_type"
                                                     required="parent.sale_lease == 'for_tenancy'"
                                                     column_invisible="parent.sale_lease != 'for_tenancy'"
                                                     force_save="1" />
                                                 <field name="price" />
-                                            </tree>
+                                            </list>
                                         </field>
                                     </group>
                                 </group>
@@ -369,7 +387,7 @@
                                         <field name="document" />
                                         <field name="document_date" />
                                         <templates>
-                                            <t t-name="kanban-box">
+                                            <t t-name="card">
                                                 <div class="oe_kanban_global_click border-primary"
                                                     style="width:500px">
                                                     <div class="row">
@@ -409,7 +427,7 @@
                                         <field name="image" />
                                         <field name="title" />
                                         <templates>
-                                            <t t-name="kanban-box">
+                                            <t t-name="card">
                                                 <div class="oe_kanban_global_click text-center"
                                                     style="border:0; padding:0; margin:0; ">
                                                     <p>
@@ -484,7 +502,7 @@
                                         <field name="image" />
                                         <field name="sequence" widget="handle" />
                                         <templates>
-                                            <t t-name="kanban-box">
+                                            <t t-name="card">
                                                 <div
                                                     class="card oe_kanban_global_click p-0 border-0">
                                                     <div class="row">
@@ -548,7 +566,7 @@
                                         <field name="image" />
                                         <field name="sequence" widget="handle" />
                                         <templates>
-                                            <t t-name="kanban-box">
+                                            <t t-name="card">
                                                 <div
                                                     class="card oe_kanban_global_click p-0 border-0">
                                                     <div class="row">
@@ -613,7 +631,7 @@
                                         <field name="description" />
                                         <field name="image" />
                                         <templates>
-                                            <t t-name="kanban-box">
+                                            <t t-name="card">
                                                 <div class="oe_kanban_global_click mx-2"
                                                     style="border:0; margin:0; padding:0; ">
                                                     <div class="row justify-content-center">
@@ -679,7 +697,7 @@
                                         <field name="image" />
                                         <field name="connectivity_id" />
                                         <templates>
-                                            <t t-name="kanban-box">
+                                            <t t-name="card">
                                                 <div
                                                     class="oe_kanban_global_click border-bottom rounded"
                                                     style="width: 343px; height: auto;border: 0px; border-bottom: none !important;">
@@ -710,11 +728,7 @@
                             </page>
                         </notebook>
                     </sheet>
-                    <div class="oe_chatter">
-                        <field name="message_follower_ids" />
-                        <field name="activity_ids" />
-                        <field name="message_ids" />
-                    </div>
+                    <chatter/>
                 </form>
             </field>
         </record>
@@ -722,7 +736,11 @@
             <field name="name">property.details.tree.view</field>
             <field name="model">property.details</field>
             <field name="arch" type="xml">
-                <tree string="Property">
+                <list string="Properties" multi_edit="1"
+                    decoration-info="stage == 'draft'"
+                    decoration-success="stage == 'available'"
+                    decoration-warning="stage in ['booked', 'on_lease', 'sale']"
+                    decoration-muted="stage == 'sold'">
                     <field name="name" />
                     <field name="type" />
                     <field name="property_subtype_id" />
@@ -731,17 +749,18 @@
                         decoration-info="sale_lease == 'for_sale'"
                         decoration-warning="sale_lease == 'for_tenancy'" />
                     <field name="price" />
-                    <field name="company_id" />
+                    <field name="responsible_id" widget="many2one_avatar_user"/>
+                    <field name="company_id" groups="base.group_multi_company"/>
                     <field name="city_id" />
                     <field name="country_id" />
                     <field name="activity_ids" widget="list_activity" />
                     <field name="stage"
                         widget="badge"
                         decoration-info="stage == 'booked'"
-                        decoration-primary="stage == 'available'"
-                        decoration-success="stage=='sold'"
-                        decoration-warning="stage in ['on_lease','sale']" />
-                </tree>
+                        decoration-success="stage == 'available'"
+                        decoration-warning="stage in ['booked','on_lease','sale']"
+                        decoration-danger="stage == 'sold'" />
+                </list>
             </field>
         </record>
         <record id="property_details_kanban_view" model="ir.ui.view">
@@ -760,9 +779,16 @@
                     <field name="is_parent_property" />
                     <field name="parent_landlord_id" />
                     <field name="currency_id" />
+                    <field name="stage"/>
+                    <field name="responsible_id"/>
+                    <field name="company_id"/>
                     <templates>
-                        <t t-name="kanban-box">
-                            <div class="oe_kanban_global_click" style="padding:0px;">
+                        <t t-name="card">
+                            <div style="padding:0px;">
+                                <div class="position-absolute top-0 end-0 m-2 z-1">
+                                    <field name="stage" widget="label_selection"
+                                        options="{'classes': {'draft': 'info', 'available': 'success', 'booked': 'warning', 'on_lease': 'primary', 'sale': 'warning', 'sold': 'danger'}}"/>
+                                </div>
                                 <div class="text-center">
                                     <t t-if="record.image.raw_value">
                                         <img alt="Avtar"
@@ -903,7 +929,16 @@
                     <field name="city_id" />
                     <field name="landlord_id" />
                     <field name="parent_landlord_id" />
+                    <field name="responsible_id"/>
                     <separator />
+                    <filter string="Draft" name="draft" domain="[('stage', '=', 'draft')]"/>
+                    <filter string="Available" name="available" domain="[('stage', '=', 'available')]"/>
+                    <filter string="Reserved" name="reserved" domain="[('stage', '=', 'booked')]"/>
+                    <filter string="Rented" name="rented" domain="[('stage', '=', 'on_lease')]"/>
+                    <filter string="For Sale" name="for_sale" domain="[('stage', '=', 'sale')]"/>
+                    <filter string="Sold" name="sold" domain="[('stage', '=', 'sold')]"/>
+                    <filter string="My Properties" name="my_properties" domain="[('responsible_id', '=', uid)]"/>
+
                     <filter string="Company" name="group_by_company" domain="[]"
                         context="{'group_by':'company_id'}" />
                     <filter string="Project" name="group_by_project" domain="[]"
@@ -920,6 +955,10 @@
                     <separator />
                     <filter string="Landlord" name="landlord" domain="[]"
                         context="{'group_by':'landlord_id'}" />
+                    <filter string="Responsible" name="responsible" domain="[]"
+                        context="{'group_by':'responsible_id'}" />
+                    <filter string="Region" name="region" domain="[]"
+                        context="{'group_by':'region_id'}" />
                     <separator />
                     <filter string="Country" name="country" domain="[]"
                         context="{'group_by':'country_id'}" />
@@ -959,7 +998,12 @@
             <field name="name">Properties</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">property.details</field>
-            <field name="view_mode">tree,kanban,form,pivot,activity</field>
+            <field name="view_mode">list,kanban,form,pivot,activity</field>
+            <field name="search_view_id" ref="property_details_search_view"/>
+            <field name="help" type="html">
+                <p class="o_view_nocontent_smiling_face">Create a property</p>
+                <p>Make it available, create a rental contract, and follow the full rental lifecycle.</p>
+            </field>
         </record>
 
         <!-- Property Details Server Action -->

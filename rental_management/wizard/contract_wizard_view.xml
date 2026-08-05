@@ -18,7 +18,7 @@
                     <group string="Property Details">
                         <group>
                             <field name="is_contract_extend" invisible="1"/>
-                            <field name="property_id" readonly="1" force_save="1"/>
+                            <field name="property_id" readonly="is_contract_extend" force_save="1"/>
                             <field name="company_id" invisible="1"/>
                             <field name="currency_id" invisible="1"/>
                             <field name="is_extra_service" invisible="1"/>
@@ -65,7 +65,8 @@
                         </group>
                         <group>
                             <field name="start_date" required="1"/>
-
+                            <field name="invoice_start_date" required="1"/>
+                            <field name="installment_mode" required="1"/>
                         </group>
                     </group>
                     <group string="Security Deposit">
@@ -131,6 +132,7 @@
                         </group>
                         <group>
                             <field name="broker_item_id" invisible="not is_any_broker" required="is_any_broker"/>
+                            <field name="maintenance_item_id" invisible="not is_any_maintenance" required="is_any_maintenance"/>
                         </group>
                     </group>
                     <notebook>
@@ -151,15 +153,10 @@
                         </page>
                     </notebook>
                     <footer>
-                        <button string="Create Contract" type="object"
-                                class="btn btn-outline-success"
-                                name="contract_action"
-                                invisible="payment_term == 'full_payment'"/>
-                        <button string="Create Invoice" type="object"
-                                class="btn btn-outline-success"
-                                name="contract_action"
-                                invisible="payment_term != 'full_payment'"/>
-                        <button string="Cancel" special="cancel" class="btn btn-outline-danger"/>
+                        <button string="Create Draft Contract" type="object"
+                                class="btn-primary"
+                                name="contract_action"/>
+                        <button string="Cancel" special="cancel" class="btn-secondary"/>
                     </footer>
                 </form>
             </field>

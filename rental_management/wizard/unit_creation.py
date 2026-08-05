@@ -4,6 +4,7 @@
 
 
 from odoo import api, fields, models, _
+from odoo.fields import Command
 
 
 # Unit Create from Project
@@ -11,8 +12,8 @@ class UnitCreation(models.TransientModel):
     _name = 'unit.creation'
     _description = 'Project Unit Creation'
 
-    total_floors = fields.Integer(string="Total Floors", default="1")
-    units_per_floor = fields.Integer(string="Units per Floor", default="1")
+    total_floors = fields.Integer(string="Total Floors", default=1)
+    units_per_floor = fields.Integer(string="Units per Floor", default=1)
     property_code_prefix = fields.Char(string="Prefix",
                                        help="Prefix for Property Code")
     floor_start_from = fields.Integer(string="Floor Start From")
@@ -35,12 +36,12 @@ class UnitCreation(models.TransientModel):
         return res
 
     def action_create_property_unit(self):
-        created_ids = []
+        self.ensure_one()
         active_id = self._context.get("active_id", False)
         unit_from = self._context.get('unit_from')
         property_rec = {}
         project_id = False
-        if self.total_floors == 0:
+        if self.total_floors <= 0:
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
@@ -51,7 +52,7 @@ class UnitCreation(models.TransientModel):
                     'sticky': False,
                 }
             }
-        if self.units_per_floor == 0:
+        if self.units_per_floor <= 0:
             return {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
@@ -120,13 +121,17 @@ class UnitCreation(models.TransientModel):
         )
         property_rec.update(availability_info)
         # Property Data
+        vals_list = []
         for data in property_data:
-            property_rec['name'] = data.get('name')
-            property_rec['property_seq'] = data.get('property_seq')
-            property_rec['floor'] = data.get('floor')
-            property_id = self.env['property.details'].sudo().create(
-                property_rec)
-            created_ids.append(property_id.id)
+            vals = dict(property_rec)
+            vals.update({
+                'name': data.get('name'),
+                'property_seq': data.get('property_seq'),
+                'floor': data.get('floor'),
+            })
+            vals_list.append(vals)
+        created_properties = self.env['property.details'].create(vals_list)
+        created_ids = created_properties.ids
         project_id.write({
             'total_floors': self.total_floors,
             'units_per_floor': self.units_per_floor,
@@ -166,16 +171,16 @@ class UnitCreation(models.TransientModel):
         # Amenities
         if project_id.avail_amenity:
             info_rec['amenities'] = project_id.avail_amenity
-            info_rec['amenities_ids'] = unit_amenities
+            info_rec['amenities_ids'] = [Command.set(unit_amenities)]
         # Specifications
         if project_id.avail_specification:
             info_rec['is_facilities'] = project_id.avail_specification
-            info_rec['property_specification_ids'] = unit_specification
+            info_rec['property_specification_ids'] = [Command.set(unit_specification)]
         # Images
         if project_id.avail_image:
             info_rec['is_images'] = project_id.avail_image
             for image in unit_images:
-                images.append((0, 0, {
+                images.append(Command.create({
                     'title': image.title,
                     'sequence': image.sequence,
                     'image': image.image,
@@ -186,7 +191,7 @@ class UnitCreation(models.TransientModel):
         if project_id.avail_nearby_connectivity:
             info_rec['nearby_connectivity'] = project_id.avail_nearby_connectivity
             for n in unit_connectivity:
-                nearby.append((0, 0, {
+                nearby.append(Command.create({
                     'connectivity_id': n.connectivity_id.id,
                     'name': n.name,
                     'image': n.image,

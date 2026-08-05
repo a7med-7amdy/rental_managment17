@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 # Copyright 2020-Today TechKhedut.
 # Part of TechKhedut. See LICENSE file for full copyright and licensing details.
-import datetime
 from dateutil.relativedelta import relativedelta
 from odoo import fields, api, models, _
+from odoo.fields import Command
+from odoo.exceptions import UserError, ValidationError
+
+import logging
+
+_logger = logging.getLogger(__name__)
 
 
 class PropertyVendor(models.Model):
@@ -11,27 +16,31 @@ class PropertyVendor(models.Model):
     _description = 'Stored Data About Sold Property'
     _rec_name = 'sold_seq'
     _inherit = ['mail.thread', 'mail.activity.mixin']
+    _check_company_auto = True
 
     # Sale Contract Details
     sold_seq = fields.Char(string='Sequence',
                            required=True,
                            readonly=True, copy=False, default=lambda self: ('New'),
                            translate=True)
-    stage = fields.Selection([('booked', 'Booked'),
-                              ('refund', 'Refund'),
-                              ('sold', 'Sold')], string='Stage')
-    company_id = fields.Many2one('res.company',
-                                 string='Company',
-                                 default=lambda self: self.env.company)
+    stage = fields.Selection(
+        [('booked', 'Booked'), ('refund', 'Refund'), ('sold', 'Sold')],
+        string='Stage', required=True, default='booked', tracking=True,
+    )
+    company_id = fields.Many2one(
+        'res.company', string='Company', required=True, index=True,
+        default=lambda self: self.env.company,
+    )
     currency_id = fields.Many2one('res.currency',
                                   related='company_id.currency_id',
                                   string='Currency')
-    date = fields.Date(string='Create Date', default=fields.Date.today())
+    date = fields.Date(string='Create Date', default=fields.Date.today)
 
     # Property Detail
-    property_id = fields.Many2one('property.details',
-                                  string='Property',
-                                  domain=[('stage', '=', 'sale')])
+    property_id = fields.Many2one(
+        'property.details', string='Property', check_company=True,
+        domain=[('stage', '=', 'sale')],
+    )
     price = fields.Monetary(related="property_id.price",
                             string="Price")
     type = fields.Selection(related="property_id.type", store=True)
@@ -177,53 +186,84 @@ class PropertyVendor(models.Model):
         res = super(PropertyVendor, self).create(vals_list)
         return res
 
-    # Name Get
-    def name_get(self):
-        data = []
-        for rec in self:
-            data.append((rec.id, '%s - %s' %
-                        (rec.sold_seq, rec.customer_id.name)))
-        return data
+    @api.depends("sold_seq", "customer_id.name")
+    def _compute_display_name(self):
+        for record in self:
+            parts = [record.sold_seq, record.customer_id.display_name]
+            record.display_name = " - ".join(filter(None, parts)) or _("Property Sale")
 
     # Scheduler
     @api.model
-    def sale_recurring_invoice(self):
-        reminder_days = self.env['ir.config_parameter'].sudo(
-        ).get_param('rental_management.sale_reminder_days')
-        today_date = fields.Date.today()
-        # today_date = datetime.date(2023, 7, 29)
-        sale_invoice = self.env['sale.invoice'].sudo().search(
-            [('invoice_created', '=', False)])
-        for data in sale_invoice:
-            reminder_date = data.invoice_date - \
-                relativedelta(days=int(reminder_days))
-            invoice_post_type = self.env['ir.config_parameter'].sudo(
-            ).get_param('rental_management.invoice_post_type')
-            if today_date == reminder_date:
-                record = {
-                    'product_id': data.property_sold_id.installment_item_id.id,
-                    'name': data.name + "\n" + (data.desc if data.desc else ""),
-                    'quantity': 1,
-                    'price_unit': data.amount,
-                    'tax_ids': data.tax_ids.ids if data.tax_ids else False,
-                }
-                invoice_lines = [(0, 0, record)]
-                sold_data = {
-                    'partner_id': data.property_sold_id.customer_id.id,
-                    'move_type': 'out_invoice',
-                    'sold_id': data.property_sold_id.id,
-                    'invoice_date': data.invoice_date,
-                    'invoice_line_ids': invoice_lines
-                }
-                invoice_id = self.env['account.move'].sudo().create(sold_data)
-                if invoice_post_type == 'automatically':
-                    invoice_id.action_post()
-                data.invoice_id = invoice_id.id
-                data.invoice_created = True
+    def sale_recurring_invoice(self, batch_size=200):
+        """Create all due sale installment invoices without duplicating them."""
+        reminder_days = int(
+            self.env['ir.config_parameter'].sudo().get_param(
+                'rental_management.sale_reminder_days', '0'
+            )
+            or 0
+        )
+        today_date = fields.Date.context_today(self)
+        due_limit = today_date + relativedelta(days=max(reminder_days, 0))
+        sale_invoices = self.env['sale.invoice'].search(
+            [
+                ('invoice_created', '=', False),
+                ('invoice_date', '!=', False),
+                ('invoice_date', '<=', due_limit),
+            ],
+            order='invoice_date, id',
+            limit=batch_size,
+        )
+        invoice_post_type = self.env['ir.config_parameter'].sudo().get_param(
+            'rental_management.invoice_post_type'
+        )
+        for data in sale_invoices:
+            try:
+                with self.env.cr.savepoint():
+                    if data.invoice_id:
+                        data.write({'invoice_created': True, 'reminder_processed': True})
+                        continue
+                    product = data.property_sold_id.installment_item_id
+                    if not product:
+                        continue
+                    record = {
+                        'product_id': product.id,
+                        'name': (data.name or _("Sale installment")) + "\n" + (data.desc or ""),
+                        'quantity': 1.0,
+                        'price_unit': data.amount,
+                    }
+                    if data.tax_ids:
+                        record['tax_ids'] = [Command.set(data.tax_ids.ids)]
+                    invoice_id = self.env['account.move'].with_company(
+                        data.property_sold_id.company_id
+                    ).create({
+                        'partner_id': data.property_sold_id.customer_id.id,
+                        'move_type': 'out_invoice',
+                        'sold_id': data.property_sold_id.id,
+                        'sale_schedule_id': data.id,
+                        'company_id': data.property_sold_id.company_id.id,
+                        'currency_id': data.property_sold_id.currency_id.id,
+                        'invoice_date': data.invoice_date,
+                        'invoice_origin': data.property_sold_id.sold_seq,
+                        'invoice_line_ids': [Command.create(record)],
+                    })
+                    if invoice_post_type == 'automatically':
+                        invoice_id.action_post()
+                    data.write({
+                        'invoice_id': invoice_id.id,
+                        'invoice_created': True,
+                        'reminder_processed': True,
+                    })
+            except Exception:
+                _logger.exception('Sale installment invoicing failed for schedule %s', data.display_name)
+        return len(sale_invoices)
 
     # Compute
     # Total amount paid amount, remaining amount
-    @api.depends('sale_invoice_ids')
+    @api.depends(
+        'sale_invoice_ids.amount', 'sale_invoice_ids.tax_amount',
+        'sale_invoice_ids.invoice_created', 'sale_invoice_ids.payment_state',
+        'sale_invoice_ids.invoice_id.amount_total',
+    )
     def _compute_remain_amount(self):
         for rec in self:
             paid_amount = 0.0
@@ -242,21 +282,16 @@ class PropertyVendor(models.Model):
             rec.remaining_amount = tax_amount + total_untaxed_amount - paid_amount
 
     # Remain Check
-    @api.depends('sale_invoice_ids')
+    @api.depends('sale_invoice_ids.is_remain_invoice')
     def _compute_remain_check(self):
         for rec in self:
-            if rec.sale_invoice_ids:
-                for data in rec.sale_invoice_ids:
-                    if data.is_remain_invoice:
-                        rec.remain_check = True
-                    else:
-                        rec.remain_check = False
-            else:
-                rec.remain_check = False
+            rec.remain_check = any(rec.sale_invoice_ids.mapped('is_remain_invoice'))
 
     # Broker Commission
-    @api.depends('is_any_broker', 'broker_id', 'commission_type', 'sale_price', 'broker_commission_percentage',
-                 'sale_price', 'broker_commission')
+    @api.depends(
+        'is_any_broker', 'broker_id', 'commission_type', 'sale_price',
+        'broker_commission_percentage', 'broker_commission',
+    )
     def _compute_broker_final_commission(self):
         for rec in self:
             if rec.is_any_broker:
@@ -277,7 +312,6 @@ class PropertyVendor(models.Model):
                  'is_any_maintenance')
     def compute_sell_price(self):
         for rec in self:
-            tax_amount = 0.0
             total_sell_amount = 0.0
             if rec.is_any_maintenance:
                 total_sell_amount = total_sell_amount + rec.total_maintenance
@@ -285,55 +319,90 @@ class PropertyVendor(models.Model):
                 total_sell_amount = total_sell_amount + rec.total_service
             total_sell_amount = total_sell_amount + rec.sale_price
             rec.payable_amount = total_sell_amount + rec.book_price
-            rec.tax_amount = tax_amount
             rec.total_sell_amount = total_sell_amount
+
+    @api.constrains("broker_commission", "broker_commission_percentage", "commission_type")
+    def _check_broker_commission_values(self):
+        for record in self:
+            if record.broker_commission < 0:
+                raise ValidationError(_("Broker commission cannot be negative."))
+            if record.commission_type == "p" and not 0 <= record.broker_commission_percentage <= 100:
+                raise ValidationError(_("Broker commission percentage must be between 0 and 100."))
+
+    @api.constrains("property_id", "company_id")
+    def _check_property_company(self):
+        for record in self:
+            if record.property_id and record.property_id.company_id != record.company_id:
+                raise ValidationError(_("The sold property and sale contract must belong to the same company."))
+
+    def _get_invoice_action(self, invoice, title):
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": title,
+            "res_model": "account.move",
+            "res_id": invoice.id,
+            "view_mode": "form",
+            "target": "current",
+        }
 
     # Mail Template
     # Sold Mail
     def send_sold_mail(self):
+        self.ensure_one()
+        if not self.customer_id.email:
+            raise UserError(_("The customer must have an email address before sending the sold-property notice."))
         mail_template = self.env.ref(
-            'rental_management.property_sold_mail_template')
+            'rental_management.property_sold_mail_template', raise_if_not_found=False)
         if mail_template:
             mail_template.send_mail(self.id, force_send=True)
+        return True
 
     # Button
     # Advance Payment Invoice
     def action_book_invoice(self):
-        mail_template = self.env.ref(
-            'rental_management.property_book_mail_template')
-        if mail_template:
-            mail_template.send_mail(self.id, force_send=True)
-        record = {
-            'product_id': self.env.ref('rental_management.property_product_1').id,
-            'name': 'Booked Amount of   ' + self.property_id.name,
-            'quantity': 1,
-            'price_unit': self.book_price
-        }
-        invoice_lines = [(0, 0, record)]
-        data = {
+        self.ensure_one()
+        if self.book_invoice_id:
+            return self._get_invoice_action(self.book_invoice_id, _("Booking Invoice"))
+        if not self.property_id or not self.customer_id:
+            raise UserError(_("Property and customer are required before creating the booking invoice."))
+        if self.book_price <= 0:
+            raise UserError(_("The booking amount must be greater than zero."))
+        product = self.booking_item_id
+        if not product:
+            raise UserError(_("Configure a booking product before creating the booking invoice."))
+        invoice = self.env['account.move'].with_company(self.company_id).create({
             'partner_id': self.customer_id.id,
             'move_type': 'out_invoice',
-            'invoice_date': fields.date.today(),
-            'invoice_line_ids': invoice_lines
-        }
-        book_invoice_id = self.env['account.move'].sudo().create(data)
-        book_invoice_id.sold_id = self.id
-        invoice_post_type = self.env['ir.config_parameter'].sudo(
-        ).get_param('rental_management.invoice_post_type')
+            'sold_id': self.id,
+            'company_id': self.company_id.id,
+            'currency_id': self.currency_id.id,
+            'invoice_origin': self.sold_seq,
+            'invoice_date': fields.Date.context_today(self),
+            'invoice_line_ids': [Command.create({
+                'product_id': product.id,
+                'name': _("Booking amount for %s") % self.property_id.display_name,
+                'quantity': 1.0,
+                'price_unit': self.book_price,
+                'tax_ids': [Command.set(self.taxes_ids.ids)] if self.taxes_ids else [],
+            })],
+        })
+        invoice_post_type = self.env['ir.config_parameter'].sudo().get_param(
+            'rental_management.invoice_post_type'
+        )
         if invoice_post_type == 'automatically':
-            book_invoice_id.action_post()
-        self.book_invoice_id = book_invoice_id.id
-        self.book_invoice_state = True
+            invoice.action_post()
+        self.write({
+            'book_invoice_id': invoice.id,
+            'book_invoice_state': True,
+            'stage': 'booked',
+        })
         self.property_id.stage = 'booked'
-        self.stage = 'booked'
-        return {
-            'type': 'ir.actions.act_window',
-            'name': 'Booked Invoice',
-            'res_model': 'account.move',
-            'res_id': book_invoice_id.id,
-            'view_mode': 'form,tree',
-            'target': 'current'
-        }
+        mail_template = self.env.ref(
+            'rental_management.property_book_mail_template', raise_if_not_found=False)
+        if mail_template and self.customer_id.email:
+            mail_template.send_mail(self.id, force_send=True)
+        return self._get_invoice_action(invoice, _("Booking Invoice"))
 
     # Refund Amount
     def action_refund_amount(self):
@@ -344,70 +413,114 @@ class PropertyVendor(models.Model):
 
     # Receive Remain Payment and Create Invoice
     def action_receive_remaining(self):
-        amount = 0.0
-        for rec in self.sale_invoice_ids:
-            if not rec.invoice_created:
-                amount = amount + rec.amount
-        sold_invoice_data = {
-            'name': "Remaining Invoice Payment",
+        self.ensure_one()
+        existing = self.sale_invoice_ids.filtered(lambda line: line.is_remain_invoice)[:1]
+        if existing:
+            return {
+                "type": "ir.actions.act_window",
+                "name": _("Remaining Payment"),
+                "res_model": "sale.invoice",
+                "res_id": existing.id,
+                "view_mode": "form",
+                "target": "current",
+            }
+        pending = self.sale_invoice_ids.filtered(
+            lambda line: not line.invoice_created and not line.is_remain_invoice
+        )
+        amount = sum(pending.mapped('amount'))
+        if amount <= 0:
+            raise UserError(_("There is no positive uninvoiced balance to consolidate."))
+        remaining = self.env['sale.invoice'].create({
+            'name': _("Remaining Invoice Payment"),
             'property_sold_id': self.id,
-            'invoice_date': fields.Date.today(),
+            'company_id': self.company_id.id,
+            'invoice_date': fields.Date.context_today(self),
             'amount': amount,
-            'is_remain_invoice': True
+            'tax_ids': [Command.set(self.taxes_ids.ids)] if self.taxes_ids else [],
+            'is_remain_invoice': True,
+        })
+        pending.unlink()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Remaining Payment"),
+            "res_model": "sale.invoice",
+            "res_id": remaining.id,
+            "view_mode": "form",
+            "target": "current",
         }
-        self.env['sale.invoice'].create(sold_invoice_data)
-        for data in self.sale_invoice_ids:
-            if not data.invoice_created and (not data.is_remain_invoice):
-                data.unlink()
 
 
 class SaleInvoice(models.Model):
     _name = 'sale.invoice'
     _description = "Sale Invoice"
+    _check_company_auto = True
 
     name = fields.Char(string="Title", translate=True)
-    property_sold_id = fields.Many2one('property.vendor',
-                                       string="Property Sold",
-                                       ondelete='cascade')
-    invoice_id = fields.Many2one('account.move', string="Invoice")
+    property_sold_id = fields.Many2one(
+        'property.vendor', string="Property Sold",
+        ondelete='cascade', check_company=True,
+    )
+    invoice_id = fields.Many2one('account.move', string="Invoice", check_company=True)
     invoice_date = fields.Date(string="Date")
     payment_state = fields.Selection(related="invoice_id.payment_state")
-    company_id = fields.Many2one('res.company',
-                                 string='Company',
-                                 default=lambda self: self.env.company)
+    company_id = fields.Many2one(
+        'res.company', string='Company', required=True, index=True,
+        default=lambda self: self.env.company,
+    )
     currency_id = fields.Many2one('res.currency',
                                   related='company_id.currency_id',
                                   string='Currency')
     amount = fields.Monetary(string="Amount")
-    invoice_created = fields.Boolean()
+    invoice_created = fields.Boolean(copy=False, index=True)
+    reminder_processed = fields.Boolean(copy=False, index=True)
     desc = fields.Text(string="Description", translate=True)
     is_remain_invoice = fields.Boolean()
     tax_ids = fields.Many2many('account.tax', string="Taxes")
     tax_amount = fields.Monetary(string="Tax Amount",
                                  compute="compute_tax_amount")
 
-    @api.depends('tax_ids', 'amount',)
+    @api.depends('tax_ids', 'amount', 'currency_id', 'property_sold_id.customer_id')
     def compute_tax_amount(self):
         for rec in self:
-            total_tax = 0.0
-            for data in rec.tax_ids:
-                total_tax = total_tax + data.amount
-            rec.tax_amount = rec.amount * total_tax / 100
+            if not rec.tax_ids or not rec.amount:
+                rec.tax_amount = 0.0
+                continue
+            result = rec.tax_ids.compute_all(
+                rec.amount,
+                currency=rec.currency_id,
+                quantity=1.0,
+                product=rec.property_sold_id.installment_item_id,
+                partner=rec.property_sold_id.customer_id,
+            )
+            rec.tax_amount = result['total_included'] - result['total_excluded']
 
     def action_create_invoice(self):
+        self.ensure_one()
+        if not self.property_sold_id.customer_id or not self.property_sold_id.installment_item_id:
+            raise UserError(_("Customer and installment product are required before invoicing."))
+        if self.amount <= 0:
+            raise UserError(_("The sale installment amount must be greater than zero."))
         invoice_post_type = self.env['ir.config_parameter'].sudo(
         ).get_param('rental_management.invoice_post_type')
-        invoice_id = self.env['account.move'].sudo().create({
+        if self.invoice_created or self.invoice_id:
+            return self.invoice_id
+        invoice_id = self.env['account.move'].with_company(
+            self.property_sold_id.company_id
+        ).create({
             'partner_id': self.property_sold_id.customer_id.id,
             'move_type': 'out_invoice',
             'sold_id': self.property_sold_id.id,
-            'invoice_date': self.invoice_date,
-            'invoice_line_ids': [(0, 0, {
+            'sale_schedule_id': self.id,
+            'company_id': self.property_sold_id.company_id.id,
+            'currency_id': self.property_sold_id.currency_id.id,
+            'invoice_origin': self.property_sold_id.sold_seq,
+            'invoice_date': self.invoice_date or fields.Date.context_today(self),
+            'invoice_line_ids': [Command.create({
                 'product_id': self.property_sold_id.installment_item_id.id,
-                'name': self.name + "\n" + (self.desc if self.desc else ""),
+                'name': (self.name or _("Sale installment")) + "\n" + (self.desc or ""),
                 'quantity': 1,
                 'price_unit': self.amount,
-                'tax_ids': self.tax_ids.ids if self.tax_ids else False
+                'tax_ids': [Command.set(self.tax_ids.ids)] if self.tax_ids else [],
             })]
         })
         if invoice_post_type == 'automatically':
@@ -417,7 +530,9 @@ class SaleInvoice(models.Model):
         self.action_send_sale_invoice(invoice_id.id)
 
     def action_send_sale_invoice(self, invoice_id):
+        self.ensure_one()
         mail_template = self.env.ref(
-            'rental_management.sale_invoice_payment_mail_template')
-        if mail_template:
+            'rental_management.sale_invoice_payment_mail_template', raise_if_not_found=False)
+        if mail_template and self.property_sold_id.customer_id.email:
             mail_template.send_mail(invoice_id, force_send=True)
+        return True

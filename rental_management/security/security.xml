@@ -1,41 +1,129 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
     <data noupdate="1">
+        <!-- Global multi-company isolation. These rules are deliberately global so RPC, dashboards,
+             exports and smart buttons cannot bypass the active user's allowed companies. -->
         <record id="rental_company_restricted_property" model="ir.rule">
-            <field name="name">Rental Management : Company Property Only</field>
-            <field name="model_id" ref="rental_management.model_property_details"/>
+            <field name="name">Rental: allowed-company properties</field>
+            <field name="model_id" ref="model_property_details"/>
             <field name="global" eval="True"/>
-            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
         <record id="rental_company_restricted_parent_property" model="ir.rule">
-            <field name="name">Rental Management : Company Parent Property Only</field>
-            <field name="model_id" ref="rental_management.model_parent_property"/>
+            <field name="name">Rental: allowed-company parent properties</field>
+            <field name="model_id" ref="model_parent_property"/>
             <field name="global" eval="True"/>
-            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_property_document" model="ir.rule">
+            <field name="name">Rental: allowed-company property documents</field>
+            <field name="model_id" ref="model_property_documents"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('property_id.company_id', 'in', company_ids)]</field>
         </record>
         <record id="rental_company_restricted_tenancy" model="ir.rule">
-            <field name="name">Rental Management : Company Tenancy Only</field>
-            <field name="model_id" ref="rental_management.model_tenancy_details"/>
+            <field name="name">Rental: allowed-company contracts</field>
+            <field name="model_id" ref="model_tenancy_details"/>
             <field name="global" eval="True"/>
-            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
         <record id="rental_company_restricted_selling" model="ir.rule">
-            <field name="name">Rental Management : Company Selling Only</field>
-            <field name="model_id" ref="rental_management.model_property_vendor"/>
+            <field name="name">Rental: allowed-company property sales</field>
+            <field name="model_id" ref="model_property_vendor"/>
             <field name="global" eval="True"/>
-            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
         <record id="rental_company_restricted_rent_invoice" model="ir.rule">
-            <field name="name">Rental Management : Company Rent Invoice Only</field>
-            <field name="model_id" ref="rental_management.model_rent_invoice"/>
+            <field name="name">Rental: allowed-company invoice schedules</field>
+            <field name="model_id" ref="model_rent_invoice"/>
             <field name="global" eval="True"/>
-            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_sale_invoice" model="ir.rule">
+            <field name="name">Rental: allowed-company sale invoice schedules</field>
+            <field name="model_id" ref="model_sale_invoice"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_tenancy_service" model="ir.rule">
+            <field name="name">Rental: allowed-company contract services</field>
+            <field name="model_id" ref="model_tenancy_service_line"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_sale_inquiry" model="ir.rule">
+            <field name="name">Rental: allowed-company sale inquiries</field>
+            <field name="model_id" ref="model_sale_inquiry"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_commission" model="ir.rule">
+            <field name="name">Rental: allowed-company broker commissions</field>
+            <field name="model_id" ref="model_rental_commission"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
         </record>
         <record id="rental_company_restricted_agreement_template" model="ir.rule">
-            <field name="name">Rental Management : Company Rental Agreement Template</field>
-            <field name="model_id" ref="rental_management.model_agreement_template"/>
+            <field name="name">Rental: allowed-company agreement templates</field>
+            <field name="model_id" ref="model_agreement_template"/>
             <field name="global" eval="True"/>
-            <field name="domain_force">['|', ('company_id', '=', False), ('company_id', 'in', company_ids)]</field>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_maintenance" model="ir.rule">
+            <field name="name">Rental: allowed-company maintenance requests</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_project" model="ir.rule">
+            <field name="name">Rental: allowed-company projects</field>
+            <field name="model_id" ref="model_property_project"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+        <record id="rental_company_restricted_subproject" model="ir.rule">
+            <field name="name">Rental: allowed-company subprojects</field>
+            <field name="model_id" ref="model_property_sub_project"/>
+            <field name="global" eval="True"/>
+            <field name="domain_force">[('company_id', 'in', company_ids)]</field>
+        </record>
+
+        <!-- Portal ownership rules. ACLs are read-only except maintenance creation. -->
+        <record id="portal_own_property_sale" model="ir.rule">
+            <field name="name">Portal: own property sale contracts</field>
+            <field name="model_id" ref="model_property_vendor"/>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="domain_force">[('customer_id.commercial_partner_id', '=', user.partner_id.commercial_partner_id.id)]</field>
+        </record>
+        <record id="portal_own_rental_contract" model="ir.rule">
+            <field name="name">Portal: own rental contracts</field>
+            <field name="model_id" ref="model_tenancy_details"/>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="domain_force">[('tenancy_id.commercial_partner_id', '=', user.partner_id.commercial_partner_id.id)]</field>
+        </record>
+        <record id="portal_own_rental_property" model="ir.rule">
+            <field name="name">Portal: properties linked to own contracts</field>
+            <field name="model_id" ref="model_property_details"/>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="domain_force">[('tenancy_ids.tenancy_id.commercial_partner_id', '=', user.partner_id.commercial_partner_id.id)]</field>
+        </record>
+        <record id="portal_own_rent_invoice" model="ir.rule">
+            <field name="name">Portal: own rental invoice schedules</field>
+            <field name="model_id" ref="model_rent_invoice"/>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="domain_force">[('tenancy_id.tenancy_id.commercial_partner_id', '=', user.partner_id.commercial_partner_id.id)]</field>
+        </record>
+        <record id="portal_own_property_document" model="ir.rule">
+            <field name="name">Portal: documents linked to own rental properties</field>
+            <field name="model_id" ref="model_property_documents"/>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="domain_force">[('property_id.tenancy_ids.tenancy_id.commercial_partner_id', '=', user.partner_id.commercial_partner_id.id)]</field>
+        </record>
+        <record id="portal_own_maintenance_request" model="ir.rule">
+            <field name="name">Portal: own rental maintenance requests</field>
+            <field name="model_id" ref="maintenance.model_maintenance_request"/>
+            <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+            <field name="domain_force">[('tenancy_id.tenancy_id.commercial_partner_id', '=', user.partner_id.commercial_partner_id.id)]</field>
         </record>
     </data>
 </odoo>

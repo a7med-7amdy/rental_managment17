@@ -78,7 +78,6 @@ class PropertyInquiry(models.Model):
 
     @api.depends(*property_domain_fields)
     def get_available_property_ids(self):
-        self = self.sudo()
         for rec in self:
             domain = [('stage', 'in', ['available', 'sale'])]
             for f in self.property_domain_fields:
@@ -86,9 +85,7 @@ class PropertyInquiry(models.Model):
                 if f_value:
                     domain += [(f"{self.property_domain_equal_field_dict.get(f, f) or f}",
                                 f"{self.property_domain_field_operator_dict.get(f, '=') or '='}", f_value)]
-            print('dommain',domain)
             available_property_ids = self.env['property.details'].search(domain)
-            print('available_property_ids',available_property_ids)
-            rec.available_property_ids = available_property_ids.ids
+            rec.available_property_ids = available_property_ids
 
 

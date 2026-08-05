@@ -4,6 +4,7 @@
 
 
 from odoo import api, fields, models
+from odoo.fields import Command
 
 
 class SubprojectCreation(models.TransientModel):
@@ -42,14 +43,14 @@ class SubprojectCreation(models.TransientModel):
             data['description'] = project_id.description
         if project_id.avail_amenity:
             data['avail_amenity'] = project_id.avail_amenity
-            data['subproject_amenity_ids'] = project_id.property_amenity_ids.ids
+            data['subproject_amenity_ids'] = [Command.set(project_id.property_amenity_ids.ids)]
         if project_id.avail_specification:
             data['avail_specification'] = project_id.avail_specification
-            data['subproject_specification_ids']= project_id.property_specification_ids.ids
+            data['subproject_specification_ids'] = [Command.set(project_id.property_specification_ids.ids)]
         if project_id.avail_image:
             data['avail_image'] = project_id.avail_image
             for image in project_id.project_image_ids:
-                images.append((0, 0, {
+                images.append(Command.create({
                     'title': image.title,
                     'sequence': image.sequence,
                     'image': image.image,
@@ -59,7 +60,7 @@ class SubprojectCreation(models.TransientModel):
         if project_id.avail_nearby_connectivity:
             data['avail_nearby_connectivity'] = project_id.avail_nearby_connectivity
             for n in project_id.project_connectivity_ids:
-                nearby.append((0, 0, {
+                nearby.append(Command.create({
                     'connectivity_id': n.connectivity_id.id,
                     'name': n.name,
                     'image': n.image,

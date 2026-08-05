@@ -272,7 +272,7 @@
                                             </group>
                                         </group>
                                     </form>
-                                    <tree editable="bottom" delete="false" create="false">
+                                    <list editable="bottom" delete="false" create="false">
                                         <field name="name" required="1" readonly="1" force_save="1" />
                                         <field name="desc" readonly="invoice_id"
                                             force_save="1" />
@@ -299,7 +299,7 @@
                                             string="Create Invoice"
                                             class="btn btn-info"
                                             invisible="invoice_created" />
-                                    </tree>
+                                    </list>
                                 </field>
                                 <group class="oe_subtotal_footer oe_right" string="Calculation"
                                     style="text-align: right">
@@ -329,7 +329,7 @@
             <field name="name">property.vendor.tree.view</field>
             <field name="model">property.vendor</field>
             <field name="arch" type="xml">
-                <tree string="Property Sold Details" create="false">
+                <list string="Property Sold Details" create="false">
                     <field name="sold_seq" />
                     <field name="property_id" />
                     <field name="type" />
@@ -345,7 +345,7 @@
                         decoration-success="stage=='sold'"
                         decoration-info="stage=='refund'"
                         decoration-primary="stage=='booked'" />
-                </tree>
+                </list>
             </field>
         </record>
         <record id="property_vendor_search_view" model="ir.ui.view">
@@ -403,7 +403,7 @@
             <field name="name">Contracts</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">property.vendor</field>
-            <field name="view_mode">tree,form,search,pivot,activity</field>
+            <field name="view_mode">list,form,search,pivot,activity</field>
         </record>
     </data>
 </odoo>

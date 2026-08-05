@@ -28,18 +28,22 @@ class UserTypes(models.Model):
 
     @api.depends('properties_ids')
     def _compute_properties_count(self):
-        for rec in self:
-            count = self.env['property.details'].search_count([('landlord_id', '=', rec.id)])
-            rec.properties_count = count
+        groups = self.env['property.details']._read_group(
+            [('landlord_id', 'in', self.ids)], ['landlord_id'], ['__count']
+        ) if self.ids else []
+        count_map = {partner.id: count for partner, count in groups}
+        for partner in self:
+            partner.properties_count = count_map.get(partner.id, 0)
 
     def action_properties(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Properties',
             'res_model': 'property.details',
             'domain': [('landlord_id', '=', self.id)],
             'context': {'default_landlord_id': self.id},
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'target': 'current'
         }
 

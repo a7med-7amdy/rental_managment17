@@ -16,13 +16,13 @@
     'summary': """
         Property Sale & Rental Management
     """,
-    'version': "3.1.1",
+    'version': '19.0.1.0.0',
     'author': 'TechKhedut Inc.',
     'company': 'TechKhedut Inc.',
     'maintainer': 'TechKhedut Inc.',
     'website': "https://www.techkhedut.com",
     'category': 'Services',
-    'depends': ['mail', 'contacts', 'account', 'hr', 'maintenance', 'crm', 'website'],
+    'depends': ['mail', 'contacts', 'account', 'hr', 'maintenance', 'crm', 'website', 'portal'],
     'data': [
         # security
         'security/groups.xml',
@@ -43,6 +43,7 @@
         'wizard/landlord_tenancy_sold_xls_view.xml',
         'wizard/booking_inquiry_view.xml',
         'wizard/active_contract_view.xml',
+        'wizard/cancel_contract_wizard_view.xml',
         'wizard/subproject_creation_view.xml',
         'wizard/unit_creation_view.xml',
         # Views
@@ -101,6 +102,7 @@
     'images': [
         'static/description/property-rental.gif',
     ],
+    'external_dependencies': {'python': ['xlsxwriter']},
     'license': 'OPL-1',
     'installable': True,
     'application': True,

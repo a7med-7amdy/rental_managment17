@@ -19,7 +19,7 @@
             <field name="name">Utility Services</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">product.product</field>
-            <field name="view_mode">tree,form,kanban,activity</field>
+            <field name="view_mode">list,form,kanban,activity</field>
             <field name="domain">[('is_extra_service_product','=',True)]</field>
             <field name="context">{'default_is_extra_service_product':True}</field>
         </record>

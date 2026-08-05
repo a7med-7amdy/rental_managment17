@@ -13,3 +13,4 @@ from . import booking_inquiry
 from . import active_contract
 from . import subproject_creation
 from . import unit_creation
+from . import cancel_contract_wizard

@@ -70,7 +70,7 @@
             <field name="name">rent.invoice.tree.view</field>
             <field name="model">rent.invoice</field>
             <field name="arch" type="xml">
-                <tree string="Rent Invoice" create="false">
+                <list string="Rent Invoice" create="false">
                     <field name="tenancy_id" />
                     <field name="customer_id" />
                     <field name="invoice_date" />
@@ -86,7 +86,7 @@
                         decoration-primary="payment_state=='partial'"
                         decoration-warning="payment_state=='reversed'"
                     />
-                </tree>
+                </list>
             </field>
         </record>
 
@@ -144,14 +144,14 @@
             <field name="name">Rent Invoices</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">rent.invoice</field>
-            <field name="view_mode">tree,form,calendar,pivot,activity</field>
+            <field name="view_mode">list,form,calendar,pivot,activity</field>
             <field name="context">{'group_by':'tenancy_id'}</field>
         </record>
         <record id="sale_invoice_action" model="ir.actions.act_window">
             <field name="name">Sale Invoices</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">account.move</field>
-            <field name="view_mode">tree,form,kanban,activity</field>
+            <field name="view_mode">list,form,kanban,activity</field>
             <field name="domain">[('sold_id', '!=', False),('sold_property_id','!=',False)]</field>
             <field name="context">{'group_by':'sold_id'}</field>
         </record>

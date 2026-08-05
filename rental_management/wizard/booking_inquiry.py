@@ -26,9 +26,10 @@ class BookingInquiry(models.TransientModel):
                 rec.total_rent = 0.0
 
     def action_property_inquiry_booking(self):
+        self.ensure_one()
         rec = self._context.get('active_id')
         lead_id = self.env['crm.lead'].browse(rec)
-        if not self.property_id and not self.customer_id:
+        if not self.property_id or not self.customer_id:
             message = {
                 'type': 'ir.actions.client',
                 'tag': 'display_notification',
@@ -47,7 +48,8 @@ class BookingInquiry(models.TransientModel):
                 'customer_id': self.customer_id.id,
                 'ask_price': self.ask_price,
                 'note': self.note,
-                'lead_id': lead_id.id
+                'lead_id': lead_id.id,
+                'company_id': self.company_id.id,
             }
             sale_inquiry_id = self.env['sale.inquiry'].create(data)
             lead_id.sale_inquiry_id = sale_inquiry_id.id

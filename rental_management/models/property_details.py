@@ -2,8 +2,12 @@
 # Copyright 2020-Today TechKhedut.
 # Part of TechKhedut. See LICENSE file for full copyright and licensing details.
 import base64
+import logging
+
 from odoo import api, fields, models, tools, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import UserError, ValidationError
+
+_logger = logging.getLogger(__name__)
 from odoo.addons.web_editor.tools import get_video_embed_code, get_video_thumbnail
 
 
@@ -11,6 +15,8 @@ class PropertyDetails(models.Model):
     _name = 'property.details'
     _description = 'Property Details and for registration new Property'
     _inherit = ['mail.thread', 'mail.activity.mixin']
+    _order = 'property_seq, name, id'
+    _check_company_auto = True
 
     # Property Details
     name = fields.Char(string='Name', required=True, translate=True)
@@ -42,12 +48,18 @@ class PropertyDetails(models.Model):
                              group_expand='_expand_groups',
                              string='Status',
                              default='draft',
-                             required=True)
+                             required=True,
+                             tracking=True,
+                             index=True)
 
     # Multi Companies
     company_id = fields.Many2one('res.company',
                                  string='Company',
+                                 required=True,
+                                 index=True,
                                  default=lambda self: self.env.company)
+    responsible_id = fields.Many2one('res.users', string='Responsible', required=True,
+                                     default=lambda self: self.env.user, index=True, tracking=True)
     currency_id = fields.Many2one('res.currency',
                                   related='company_id.currency_id',
                                   string='Currency')
@@ -60,12 +72,13 @@ class PropertyDetails(models.Model):
     # Project & Sub Project & Region
     region_id = fields.Many2one('property.region', string="Region")
     property_project_id = fields.Many2one('property.project',
-                                          string="Project")
+                                          string="Project",
+                                          check_company=True)
     subproject_id = fields.Many2one('property.sub.project',
-                                    string="Sub Project")
+                                    string="Sub Project",
+                                    check_company=True)
 
     # Address
-    region_id = fields.Many2one('property.region', string="Region")
     zip = fields.Char(string='Zip')
     street = fields.Char(string='Street1', translate=True)
     street2 = fields.Char(string='Street2', translate=True)
@@ -83,6 +96,7 @@ class PropertyDetails(models.Model):
     # Owner Details
     landlord_id = fields.Many2one('res.partner',
                                   string='LandLord',
+                                  index=True,
                                   domain=[('user_type', '=', 'landlord')])
     landlord_phone = fields.Char(string="Phone", related="landlord_id.phone")
     landlord_email = fields.Char(string="Email", related="landlord_id.email")
@@ -388,45 +402,34 @@ class PropertyDetails(models.Model):
 
     # Stage Expand
     @api.model
-    def _expand_groups(self, states, domain, order):
+    def _expand_groups(self, states, domain):
         return ['draft', 'available', 'booked', 'on_lease', 'sale', 'sold']
 
     # Unlink
     def unlink(self):
-        for rec in self:
-            if rec.stage in ['booked', 'on_lease', 'sale', 'sold']:
-                raise ValidationError(
-                    _("You can't delete property until status is in 'Draft' or 'Available'"))
-            else:
-                return super(PropertyDetails, self).unlink()
+        blocked = self.filtered(lambda rec: rec.stage not in ('draft', 'available'))
+        if blocked:
+            raise ValidationError(
+                _("Only draft or available properties can be deleted: %s")
+                % ", ".join(blocked.mapped("display_name"))
+            )
+        active_contracts = self.env["tenancy.details"].search_count(
+            [("property_id", "in", self.ids), ("contract_type", "in", ["running_contract", "expire_contract"])]
+        )
+        if active_contracts:
+            raise ValidationError(_("A property linked to an active or expired rental contract cannot be deleted."))
+        return super().unlink()
 
-    # Name-get
-    def name_get(self):
-        data = []
-        for rec in self:
-            if rec.is_parent_property:
-                if rec.type == 'land':
-                    data.append((rec.id, '%s - %s - Land' %
-                                 (rec.name, rec.parent_property_id.name)))
-                elif rec.type == 'residential':
-                    data.append((rec.id, '%s - %s - Residential' %
-                                 (rec.name, rec.parent_property_id.name)))
-                elif rec.type == 'commercial':
-                    data.append((rec.id, '%s - %s - Commercial' %
-                                 (rec.name, rec.parent_property_id.name)))
-                elif rec.type == 'industrial':
-                    data.append((rec.id, '%s - %s - Industrial' %
-                                 (rec.name, rec.parent_property_id.name)))
-            else:
-                if rec.type == 'land':
-                    data.append((rec.id, '%s - Land' % rec.name))
-                elif rec.type == 'residential':
-                    data.append((rec.id, '%s - Residential' % rec.name))
-                elif rec.type == 'commercial':
-                    data.append((rec.id, '%s - Commercial' % rec.name))
-                elif rec.type == 'industrial':
-                    data.append((rec.id, '%s - Industrial' % rec.name))
-        return data
+    @api.depends("name", "type", "is_parent_property", "parent_property_id.name")
+    def _compute_display_name(self):
+        type_labels = dict(self._fields["type"]._description_selection(self.env))
+        for record in self:
+            parts = [record.name]
+            if record.is_parent_property and record.parent_property_id:
+                parts.append(record.parent_property_id.display_name)
+            if record.type:
+                parts.append(type_labels.get(record.type, record.type))
+            record.display_name = " - ".join(filter(None, parts)) or _("Property")
 
     # Scheduler
     @api.model
@@ -438,7 +441,7 @@ class PropertyDetails(models.Model):
 
     @api.model
     def update_property_measurement(self):
-        properties = self.env['property.details'].sudo().search([])
+        properties = self.env['property.details'].search([])
         for data in properties:
             if data.type == 'residential':
                 data.compute_room_measure()
@@ -463,11 +466,13 @@ class PropertyDetails(models.Model):
     # CRM Leads
     @api.depends('sale_lease')
     def _compute_lead(self):
-        for rec in self:
-            rec.lead_count = self.env['crm.lead'].search_count(
-                [('property_id', '=', rec.id), ('type', '=', 'lead')])
-            rec.lead_opp_count = self.env['crm.lead'].search_count(
-                [('property_id', '=', rec.id), ('type', '=', 'opportunity')])
+        groups = self.env['crm.lead']._read_group(
+            [('property_id', 'in', self.ids)], ['property_id', 'type'], ['__count']
+        ) if self.ids else []
+        count_map = {(property_record.id, lead_type): count for property_record, lead_type, count in groups}
+        for property_record in self:
+            property_record.lead_count = count_map.get((property_record.id, 'lead'), 0)
+            property_record.lead_opp_count = count_map.get((property_record.id, 'opportunity'), 0)
 
     # Utility Service Total
     @api.depends('extra_service_ids')
@@ -482,33 +487,49 @@ class PropertyDetails(models.Model):
     # Counts
     # Document Count
     def _compute_document_count(self):
-        for rec in self:
-            document_count = self.env['property.documents'].search_count(
-                [('property_id', '=', rec.id)])
-            rec.document_count = document_count
+        groups = self.env['property.documents']._read_group(
+            [('property_id', 'in', self.ids)], ['property_id'], ['__count']
+        ) if self.ids else []
+        count_map = {property_record.id: count for property_record, count in groups}
+        for property_record in self:
+            property_record.document_count = count_map.get(property_record.id, 0)
 
     # Booking Count
     def _compute_booking_count(self):
-        for rec in self:
-            count = self.sold_booking_id.book_price
-            rec.booking_count = count
-            rec.tenancy_count = self.env['tenancy.details'].search_count(
-                [('property_id', '=', rec.id)])
+        groups = self.env['tenancy.details']._read_group(
+            [('property_id', 'in', self.ids)], ['property_id'], ['__count']
+        ) if self.ids else []
+        count_map = {property_record.id: count for property_record, count in groups}
+        for property_record in self:
+            property_record.booking_count = property_record.sold_booking_id.book_price
+            property_record.tenancy_count = count_map.get(property_record.id, 0)
 
     # Maintenance Request Count
     def _compute_request_count(self):
-        for rec in self:
-            request_count = self.env['maintenance.request'].search_count(
-                [('property_id', '=', rec.id)])
-            rec.request_count = request_count
+        groups = self.env['maintenance.request']._read_group(
+            [('property_id', 'in', self.ids)], ['property_id'], ['__count']
+        ) if self.ids else []
+        count_map = {property_record.id: count for property_record, count in groups}
+        for property_record in self:
+            property_record.request_count = count_map.get(property_record.id, 0)
 
     # Count
     def compute_count(self):
-        for rec in self:
-            rec.sale_broker_count = len(self.env['property.vendor'].sudo(
-            ).search([('property_id', '=', rec.id), ('is_any_broker', '=', True)]).mapped('broker_id').mapped('id'))
-            rec.tenancy_broker_count = len(self.env['tenancy.details'].sudo(
-            ).search([('property_id', '=', rec.id), ('is_any_broker', '=', True)]).mapped('broker_id').mapped('id'))
+        sale_groups = self.env['property.vendor']._read_group(
+            [('property_id', 'in', self.ids), ('is_any_broker', '=', True)],
+            ['property_id'],
+            ['broker_id:count_distinct'],
+        ) if self.ids else []
+        sale_map = {property_record.id: count for property_record, count in sale_groups}
+        tenancy_groups = self.env['tenancy.details']._read_group(
+            [('property_id', 'in', self.ids), ('is_any_broker', '=', True)],
+            ['property_id'],
+            ['broker_id:count_distinct'],
+        ) if self.ids else []
+        tenancy_map = {property_record.id: count for property_record, count in tenancy_groups}
+        for property_record in self:
+            property_record.sale_broker_count = sale_map.get(property_record.id, 0)
+            property_record.tenancy_broker_count = tenancy_map.get(property_record.id, 0)
 
     # Onchange
     # Area Wise Price
@@ -556,8 +577,16 @@ class PropertyDetails(models.Model):
     # Buttons
     # Stage Buttons
     def action_in_available(self):
-        for rec in self:
-            rec.stage = 'available'
+        active_contracts = self.env["tenancy.details"].search(
+            [("property_id", "in", self.ids), ("contract_type", "=", "running_contract")]
+        )
+        if active_contracts:
+            blocked = ", ".join(active_contracts.mapped("property_id.display_name"))
+            raise UserError(
+                _("Properties with an active rental contract cannot be made available: %s") % blocked
+            )
+        self.write({"stage": "available"})
+        return True
 
     def action_in_booked(self):
         for rec in self:
@@ -571,6 +600,7 @@ class PropertyDetails(models.Model):
         self.stage = "draft"
 
     def action_in_sale(self):
+        self.ensure_one()
         if self.sale_lease == 'for_sale':
             self.stage = 'sale'
         else:
@@ -587,6 +617,7 @@ class PropertyDetails(models.Model):
 
     # G-map Location
     def action_gmap_location(self):
+        self.ensure_one()
         if self.longitude and self.latitude:
             longitude = self.longitude
             latitude = self.latitude
@@ -602,73 +633,80 @@ class PropertyDetails(models.Model):
 
     # Smart Button
     def action_maintenance_request(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Request',
             'res_model': 'maintenance.request',
             'domain': [('property_id', '=', self.id)],
             'context': {'default_property_id': self.id},
-            'view_mode': 'kanban,tree,form',
+            'view_mode': 'kanban,list,form',
             'target': 'current'
         }
 
     def action_property_document(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Document',
             'res_model': 'property.documents',
             'domain': [('property_id', '=', self.id)],
             'context': {'default_property_id': self.id},
-            'view_mode': 'tree',
+            'view_mode': 'list',
             'target': 'current'
         }
 
     def action_sale_booking(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Booking Information',
             'res_model': 'property.vendor',
             'domain': [('property_id', '=', self.id)],
             'context': {'default_property_id': self.id},
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'target': 'current'
         }
 
     def action_crm_lead(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Leads',
             'res_model': 'crm.lead',
             'domain': [('property_id', '=', self.id), ('type', '=', 'lead')],
             'context': {'default_property_id': self.id, 'default_type': 'lead'},
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'target': 'current'
         }
 
     def action_crm_lead_opp(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Opportunity',
             'res_model': 'crm.lead',
             'domain': [('property_id', '=', self.id), ('type', '=', 'opportunity')],
             'context': {'default_property_id': self.id, 'default_type': 'opportunity'},
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'target': 'current'
         }
 
     def action_view_contract(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Rent Contracts',
             'res_model': 'tenancy.details',
             'domain': [('property_id', '=', self.id)],
-            'context': {'create': False},
-            'view_mode': 'tree,form',
+            'context': {'default_property_id': self.id, 'default_company_id': self.company_id.id},
+            'view_mode': 'list,form',
             'target': 'current'
         }
 
     def action_property_tenancy_broker(self):
-        ids = self.env['tenancy.details'].sudo().search(
+        self.ensure_one()
+        ids = self.env['tenancy.details'].search(
             [('property_id', '=', self.id), ('is_any_broker', '=', True)]).mapped('broker_id').mapped('id')
         return {
             'type': 'ir.actions.act_window',
@@ -676,12 +714,13 @@ class PropertyDetails(models.Model):
             'res_model': 'res.partner',
             'domain': [('id', 'in', ids)],
             'context': {'create': False},
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'target': 'current'
         }
 
     def action_property_sale_broker(self):
-        ids = self.env['property.vendor'].sudo().search(
+        self.ensure_one()
+        ids = self.env['property.vendor'].search(
             [('property_id', '=', self.id), ('is_any_broker', '=', True)]).mapped('broker_id').mapped('id')
         return {
             'type': 'ir.actions.act_window',
@@ -689,190 +728,282 @@ class PropertyDetails(models.Model):
             'res_model': 'res.partner',
             'domain': [('id', 'in', ids)],
             'context': {'create': False},
-            'view_mode': 'tree,form',
+            'view_mode': 'list,form',
             'target': 'current'
+        }
+
+    def action_create_rental_contract(self):
+        self.ensure_one()
+        if self.stage != "available":
+            raise UserError(_("Only an available property can be used to create a rental contract."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Create Rental Contract"),
+            "res_model": "tenancy.details",
+            "view_mode": "form",
+            "target": "current",
+            "context": {
+                "default_property_id": self.id,
+                "default_company_id": self.company_id.id,
+                "default_contract_type": "new_contract",
+            },
+        }
+
+
+    def action_view_rent_invoices(self):
+        self.ensure_one()
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Rental Invoices"),
+            "res_model": "account.move",
+            "domain": [
+                ("tenancy_id.property_id", "=", self.id),
+                ("move_type", "=", "out_invoice"),
+            ],
+            "view_mode": "list,form",
+            "context": {"default_move_type": "out_invoice"},
+        }
+
+    def action_view_active_contract(self):
+        self.ensure_one()
+        contract = self.env["tenancy.details"].search(
+            [("property_id", "=", self.id), ("contract_type", "=", "running_contract")],
+            order="start_date desc, id desc",
+            limit=1,
+        )
+        if not contract:
+            raise UserError(_("No active rental contract exists for this property."))
+        return {
+            "type": "ir.actions.act_window",
+            "res_model": "tenancy.details",
+            "res_id": contract.id,
+            "view_mode": "form",
+            "target": "current",
         }
 
     # Server Action
     def action_available_property(self):
         active_ids = self._context.get('active_ids')
-        property_rec = self.env['property.details'].sudo().browse(active_ids)
+        property_rec = self.env['property.details'].browse(active_ids).exists()
         for data in property_rec:
             if data.stage == 'draft':
                 data.write({
                     'stage': 'available'
                 })
 
-    # DashBoard
+    # Dashboard
     @api.model
     def get_property_stats(self):
-        # Property Stages
-        property = self.env['property.details']
-        avail_property = property.sudo().search_count(
-            [('stage', '=', 'available')])
-        booked_property = property.sudo().search_count(
-            [('stage', '=', 'booked')])
-        lease_property = property.sudo().search_count(
-            [('stage', '=', 'on_lease')])
-        sale_property = property.sudo().search_count([('stage', '=', 'sale')])
-        sold_property = property.sudo().search_count([('stage', '=', 'sold')])
-        currency_symbol = self.env.company.currency_id.symbol
-        land_property = property.sudo().search_count([('type', '=', 'land')])
-        residential_property = property.sudo().search_count(
-            [('type', '=', 'residential')])
-        commercial_property = property.sudo().search_count(
-            [('type', '=', 'commercial')])
-        industrial_property = property.sudo().search_count(
-            [('type', '=', 'industrial')])
-        property_type = [['Land', 'Residential', 'Commercial', 'Industrial'],
-                         [land_property, residential_property, commercial_property, industrial_property]]
-        property_stage = [['Available Properties', 'Sold Properties', 'Booked Properties', 'On Sale', 'On Lease'],
-                          [avail_property, sold_property, booked_property, sale_property, lease_property]]
+        """Return permission-aware, company-scoped dashboard data without sudo."""
+        allowed_company_ids = [self.env.company.id]
+        company_domain = [("company_id", "in", allowed_company_ids)]
+        property_model = self.env["property.details"]
+        contract_model = self.env["tenancy.details"]
+        sale_model = self.env["property.vendor"]
+        move_model = self.env["account.move"]
+        today = fields.Date.context_today(self)
 
-        # Rent Contract
-        rent_contract = self.env['tenancy.details'].sudo()
-        draft_contract = rent_contract.search_count(
-            [('contract_type', '=', 'new_contract')])
-        running_contract = rent_contract.search_count(
-            [('contract_type', '=', 'running_contract')])
-        expire_contract = rent_contract.search_count(
-            [('contract_type', '=', 'expire_contract')])
-        extend_contract = rent_contract.search_count(
-            [('is_extended', '=', True)])
-        close_contract = rent_contract.search_count(
-            [('contract_type', '=', 'close_contract')])
-        full_tenancy_total = sum(self.env['rent.invoice'].search(
-            ['|', ('type', '=', 'rent'), ('type', '=', 'full_rent')]).mapped('rent_invoice_id').mapped('amount_total'))
-        pending_invoice = self.env['rent.invoice'].search_count(
-            [('payment_state', '=', 'not_paid')])
+        def grouped_counts(model, group_field, domain=None):
+            result = {}
+            groups = model.read_group((domain or []) + company_domain, [group_field], [group_field], lazy=False)
+            for group in groups:
+                key = group.get(group_field)
+                if isinstance(key, tuple):
+                    key = key[0]
+                if key:
+                    result[key] = group.get("__count", 0)
+            return result
 
-        # Sale Contract
-        sale_contract = self.env['property.vendor'].sudo()
-        booked = sale_contract.search_count([('stage', '=', 'booked')])
-        sale_sold = sale_contract.search_count([('stage', '=', 'sold')])
-        refund = sale_contract.search_count([('stage', '=', 'refund')])
-        sold_total = sum(sale_contract.search([('stage', '=', 'sold')]).mapped('sale_price'))
-        pending_invoice_sale = self.env['account.move'].search_count(
-            [('sold_id', '!=', False), ('payment_state', '=', 'not_paid')])
+        stage_counts = grouped_counts(property_model, "stage")
+        type_counts = grouped_counts(property_model, "type")
+        contract_counts = grouped_counts(contract_model, "contract_type")
+        sale_counts = grouped_counts(sale_model, "stage")
 
-        # Region, Project, Sub Project, Properties
-        region_count = self.env['property.region'].search_count([])
-        project_count = self.env['property.project'].search_count([])
-        subproject_count = self.env['property.sub.project'].search_count([])
-        total_property = property.sudo().search_count([])
+        rent_moves_domain = company_domain + [
+            ("tenancy_id", "!=", False),
+            ("move_type", "=", "out_invoice"),
+            ("state", "=", "posted"),
+        ]
+        rent_aggregates = move_model.read_group(
+            rent_moves_domain,
+            ["amount_total:sum", "amount_residual:sum"],
+            [],
+        )
+        rent_totals = rent_aggregates[0] if rent_aggregates else {}
+        collected_amount = (rent_totals.get("amount_total", 0.0) or 0.0) - (
+            rent_totals.get("amount_residual", 0.0) or 0.0
+        )
+        outstanding_amount = rent_totals.get("amount_residual", 0.0) or 0.0
+        overdue_invoice = move_model.search_count(
+            rent_moves_domain
+            + [("invoice_date_due", "<", today), ("amount_residual", ">", 0)]
+        )
+        pending_invoice = move_model.search_count(
+            rent_moves_domain + [("amount_residual", ">", 0)]
+        )
+        monthly_contracts = contract_model.search(
+            company_domain
+            + [("contract_type", "=", "running_contract"), ("payment_term", "=", "monthly")]
+        )
+        monthly_rent = sum(monthly_contracts.mapped("total_rent"))
+        total_rentable = sum(
+            stage_counts.get(stage, 0) for stage in ("available", "booked", "on_lease")
+        )
+        occupancy_rate = (
+            round(stage_counts.get("on_lease", 0) * 100.0 / total_rentable, 2)
+            if total_rentable
+            else 0.0
+        )
 
-        # Customer & Landlord
-        customer_count = self.env['res.partner'].sudo(
-        ).search_count([('user_type', '=', 'customer')])
-        landlord_count = self.env['res.partner'].sudo(
-        ).search_count([('user_type', '=', 'landlord')])
+        sold_total_group = sale_model.read_group(
+            company_domain + [("stage", "=", "sold")], ["sale_price:sum"], []
+        )
+        sold_total = (sold_total_group[0].get("sale_price", 0.0) if sold_total_group else 0.0) or 0.0
+        pending_invoice_sale = move_model.search_count(
+            company_domain
+            + [("sold_id", "!=", False), ("state", "=", "posted"), ("amount_residual", ">", 0)]
+        )
 
-        return {
-            # Property
-            'avail_property': avail_property,
-            'booked_property': booked_property,
-            'lease_property': lease_property,
-            'sale_property': sale_property,
-            'sold_property': sold_property,
-            # Rent Contract
-            'draft_contract': draft_contract,
-            'running_contract': running_contract,
-            'expire_contract': expire_contract,
-            'extend_contract': extend_contract,
-            'close_contract': close_contract,
-            'pending_invoice': pending_invoice,
-            'rent_total': str(round(full_tenancy_total, 2)) + ' ' + currency_symbol if currency_symbol else "",
-            # Sale Contract
-            'booked': booked,
-            'sale_sold': sale_sold,
-            'refund': refund,
-            'sold_total': str(round(sold_total, 2)) + ' ' + currency_symbol if currency_symbol else "",
-            'pending_invoice_sale': pending_invoice_sale,
-            # Customer & Landlord
-            'customer_count': customer_count,
-            'landlord_count': landlord_count,
-            # Region, Project, Sub Project, Properties
-            'region_count': region_count,
-            'project_count': project_count,
-            'subproject_count': subproject_count,
-            'total_property': total_property,
-            # Graph
-            'property_type': property_type,
-            'property_stage': property_stage,
-            'property_map_data': self.get_property_map_data(),
-            'due_paid_amount': self.due_paid_amount(),
-            'tenancy_top_broker': self.get_top_broker(),
+        partner_company_domain = [
+            "|",
+            ("company_id", "=", False),
+            ("company_id", "in", allowed_company_ids),
+        ]
+        currency_symbol = self.env.company.currency_id.symbol or ""
+        stats = {
+            "avail_property": stage_counts.get("available", 0),
+            "booked_property": stage_counts.get("booked", 0),
+            "lease_property": stage_counts.get("on_lease", 0),
+            "sale_property": stage_counts.get("sale", 0),
+            "sold_property": stage_counts.get("sold", 0),
+            "draft_contract": contract_counts.get("new_contract", 0),
+            "running_contract": contract_counts.get("running_contract", 0),
+            "expire_contract": contract_counts.get("expire_contract", 0),
+            "extend_contract": contract_model.search_count(company_domain + [("is_extended", "=", True)]),
+            "close_contract": contract_counts.get("close_contract", 0),
+            "cancel_contract": contract_counts.get("cancel_contract", 0),
+            "pending_invoice": pending_invoice,
+            "rent_total": f"{collected_amount:.2f} {currency_symbol}".strip(),
+            "monthly_rent": monthly_rent,
+            "collected_amount": collected_amount,
+            "outstanding_amount": outstanding_amount,
+            "overdue_invoice": overdue_invoice,
+            "occupancy_rate": occupancy_rate,
+            "maintenance_request": self.env["maintenance.request"].search_count(company_domain),
+            "booked": sale_counts.get("booked", 0),
+            "sale_sold": sale_counts.get("sold", 0),
+            "refund": sale_counts.get("refund", 0),
+            "sold_total": f"{sold_total:.2f} {currency_symbol}".strip(),
+            "pending_invoice_sale": pending_invoice_sale,
+            "customer_count": self.env["res.partner"].search_count(
+                partner_company_domain + [("user_type", "=", "customer")]
+            ),
+            "landlord_count": self.env["res.partner"].search_count(
+                partner_company_domain + [("user_type", "=", "landlord")]
+            ),
+            "region_count": self.env["property.region"].search_count([]),
+            "project_count": self.env["property.project"].search_count(company_domain),
+            "subproject_count": self.env["property.sub.project"].search_count(company_domain),
+            "total_property": sum(stage_counts.values()),
+            "property_type": [
+                ["Land", "Residential", "Commercial", "Industrial"],
+                [
+                    type_counts.get("land", 0),
+                    type_counts.get("residential", 0),
+                    type_counts.get("commercial", 0),
+                    type_counts.get("industrial", 0),
+                ],
+            ],
+            "property_stage": [
+                ["Available Properties", "Sold Properties", "Booked Properties", "On Sale", "On Lease"],
+                [
+                    stage_counts.get("available", 0),
+                    stage_counts.get("sold", 0),
+                    stage_counts.get("booked", 0),
+                    stage_counts.get("sale", 0),
+                    stage_counts.get("on_lease", 0),
+                ],
+            ],
         }
+        stats.update(
+            {
+                "property_map_data": self.get_property_map_data(),
+                "due_paid_amount": self.due_paid_amount(),
+                "tenancy_top_broker": self.get_top_broker(),
+            }
+        )
+        return stats
 
+    @api.model
     def get_top_broker(self):
-        broker_tenancy = {}
-        broker_sold = {}
-        for group in self.env['tenancy.details'].read_group([('is_any_broker', '=', True)],
-                                                            ['broker_id'],
-                                                            ['broker_id'], limit=5):
-            if group['broker_id']:
-                name = self.env['res.partner'].sudo().browse(
-                    int(group['broker_id'][0])).name
-                broker_tenancy[name] = group['broker_id_count']
-        for group in self.env['property.vendor'].read_group([('is_any_broker', '=', True), ('stage', '=', 'sold')],
-                                                            ['broker_id'],
-                                                            ['broker_id'], limit=5):
-            if group['broker_id']:
-                name = self.env['res.partner'].sudo().browse(
-                    int(group['broker_id'][0])).name
-                broker_sold[name] = group['broker_id_count']
+        company_domain = [("company_id", "=", self.env.company.id)]
 
-        brokers_tenancy_list = dict(
-            sorted(broker_tenancy.items(), key=lambda x: x[1], reverse=True))
-        broker_sold_list = dict(
-            sorted(broker_sold.items(), key=lambda x: x[1], reverse=True))
-        return [list(brokers_tenancy_list.keys()), list(brokers_tenancy_list.values()), list(broker_sold_list.keys()),
-                list(broker_sold_list.values())]
+        def broker_data(model, extra_domain):
+            groups = model.read_group(
+                company_domain + extra_domain,
+                ["broker_id"],
+                ["broker_id"],
+                limit=5,
+                orderby="broker_id_count desc",
+            )
+            names, values = [], []
+            for group in groups:
+                if group.get("broker_id"):
+                    names.append(group["broker_id"][1])
+                    values.append(group.get("broker_id_count", group.get("__count", 0)))
+            return names, values
 
+        tenancy_names, tenancy_values = broker_data(
+            self.env["tenancy.details"], [("is_any_broker", "=", True)]
+        )
+        sold_names, sold_values = broker_data(
+            self.env["property.vendor"], [("is_any_broker", "=", True), ("stage", "=", "sold")]
+        )
+        return [tenancy_names, tenancy_values, sold_names, sold_values]
+
+    @api.model
     def due_paid_amount(self):
-        sold = {}
-        tenancy = {}
-        not_paid_amount_sold = 0.0
-        paid_amount_sold = 0.0
-        not_paid_amount_tenancy = 0.0
-        paid_amount_tenancy = 0.0
-        property_sold = self.env['account.move'].sudo().search(
-            [('sold_id', '!=', False)])
-        for data in property_sold:
-            if data.sold_id.stage == "sold":
-                if data.payment_state == "not_paid":
-                    not_paid_amount_sold = not_paid_amount_sold + data.amount_total
-                if data.payment_state == "paid":
-                    paid_amount_sold = paid_amount_sold + data.amount_total
-        sold['Due'] = not_paid_amount_sold
-        sold['Paid'] = paid_amount_sold
-        property_tenancy = self.env['rent.invoice'].sudo().search([])
-        for rec in property_tenancy:
-            if rec.payment_state == 'not_paid':
-                not_paid_amount_tenancy = not_paid_amount_tenancy + \
-                                          rec.rent_invoice_id.amount_total
-            if rec.payment_state == 'paid':
-                paid_amount_tenancy = paid_amount_tenancy + rec.rent_invoice_id.amount_total
-        tenancy['Due'] = not_paid_amount_tenancy
-        tenancy['Paid'] = paid_amount_tenancy
-        return [list(sold.keys()), list(sold.values()), list(tenancy.keys()),
-                list(tenancy.values())]
+        company_domain = [("company_id", "=", self.env.company.id)]
 
+        def totals(domain):
+            groups = self.env["account.move"].read_group(
+                company_domain + domain + [("state", "=", "posted")],
+                ["payment_state", "amount_total:sum", "amount_residual:sum"],
+                ["payment_state"],
+                lazy=False,
+            )
+            total = sum((group.get("amount_total", 0.0) or 0.0) for group in groups)
+            due = sum((group.get("amount_residual", 0.0) or 0.0) for group in groups)
+            return {"Due": due, "Paid": total - due}
+
+        sold = totals([("sold_id", "!=", False)])
+        tenancy = totals([("tenancy_id", "!=", False), ("move_type", "=", "out_invoice")])
+        return [list(sold.keys()), list(sold.values()), list(tenancy.keys()), list(tenancy.values())]
+
+    @api.model
     def get_property_map_data(self):
         data = []
-        properties = self.env['property.details'].sudo().search(
-            [('stage', '=', 'available')])
-        for prop in properties:
-            if not prop.latitude or not prop.longitude:
-                continue
-            title = "Property : " + prop.name + (
-                ("\nRegion :" + prop.region_id.name) if prop.region_id.name else "") + (
-                        ("\nCity :" + prop.city_id.name) if prop.city_id.name else "")
-            data.append({
-                'title': title,
-                'latitude': prop.latitude,
-                'longitude': prop.longitude,
-            })
+        properties = self.search(
+            [
+                ("company_id", "=", self.env.company.id),
+                ("stage", "=", "available"),
+                ("latitude", "!=", False),
+                ("longitude", "!=", False),
+            ]
+        )
+        for property_record in properties:
+            location_parts = [_("Property: %s") % property_record.display_name]
+            if property_record.region_id:
+                location_parts.append(_("Region: %s") % property_record.region_id.display_name)
+            if property_record.city_id:
+                location_parts.append(_("City: %s") % property_record.city_id.display_name)
+            data.append(
+                {
+                    "title": "\n".join(location_parts),
+                    "latitude": property_record.latitude,
+                    "longitude": property_record.longitude,
+                }
+            )
         return data
 
 
@@ -931,7 +1062,7 @@ class PropertyDocuments(models.Model):
     property_id = fields.Many2one('property.details',
                                   string='Property Name',
                                   readonly=True)
-    document_date = fields.Date(string='Date', default=fields.Date.today())
+    document_date = fields.Date(string='Date', default=fields.Date.today)
     doc_type = fields.Selection([('photos', 'Photo'),
                                  ('brochure', 'Brochure'),
                                  ('certificate', 'Certificate'),
@@ -1153,15 +1284,11 @@ class TenancyInquiry(models.Model):
     customer_id = fields.Many2one('res.partner', string="Customer")
     lead_id = fields.Many2one('crm.lead', string="Lead")
 
-    def name_get(self):
-        data = []
-        for rec in self:
-            if rec.lead_id:
-                data.append((rec.id, '%s - %s' %
-                             (rec.customer_id.name, rec.lead_id.name)))
-            else:
-                data.append((rec.id, '%s' % rec.customer_id.name))
-        return data
+    @api.depends("customer_id.name", "lead_id.name")
+    def _compute_display_name(self):
+        for record in self:
+            parts = [record.customer_id.display_name, record.lead_id.display_name]
+            record.display_name = " - ".join(filter(None, parts)) or _("Rent Inquiry")
 
 
 # Sale Inquiry
@@ -1185,15 +1312,11 @@ class SaleInquiry(models.Model):
     lead_id = fields.Many2one('crm.lead',
                               string="Lead")
 
-    def name_get(self):
-        data = []
-        for rec in self:
-            if rec.lead_id:
-                data.append((rec.id, '%s - %s' %
-                             (rec.customer_id.name, rec.lead_id.name)))
-            else:
-                data.append((rec.id, '%s' % rec.customer_id.name))
-        return data
+    @api.depends("customer_id.name", "lead_id.name")
+    def _compute_display_name(self):
+        for record in self:
+            parts = [record.customer_id.display_name, record.lead_id.display_name]
+            record.display_name = " - ".join(filter(None, parts)) or _("Sale Inquiry")
 
 
 # Property Area Type
@@ -1472,18 +1595,24 @@ class ParentProperty(models.Model):
                                          string='Location')
 
     def _compute_properties(self):
-        for rec in self:
-            rec.property_count = self.env['property.details'].search_count(
-                [('parent_property_id', '=', rec.id), ('is_parent_property', '=', True)])
+        groups = self.env['property.details']._read_group(
+            [('parent_property_id', 'in', self.ids), ('is_parent_property', '=', True)],
+            ['parent_property_id'],
+            ['__count'],
+        ) if self.ids else []
+        count_map = {parent.id: count for parent, count in groups}
+        for property_record in self:
+            property_record.property_count = count_map.get(property_record.id, 0)
 
     def action_properties_parent(self):
+        self.ensure_one()
         return {
             'type': 'ir.actions.act_window',
             'name': 'Properties',
             'res_model': 'property.details',
             'domain': [('parent_property_id', '=', self.id), ('is_parent_property', '=', True)],
             'context': {'default_parent_property_id': self.id, 'default_is_parent_property': True},
-            'view_mode': 'kanban,tree,form',
+            'view_mode': 'kanban,list,form',
             'target': 'current'
         }
 

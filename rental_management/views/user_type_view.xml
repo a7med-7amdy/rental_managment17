@@ -19,7 +19,7 @@
                 <xpath expr="//notebook/page[@name='contact_addresses']" position="before">
                     <page string="Rent Contract" invisible="user_type != 'broker'">
                         <field name="tenancy_ids">
-                            <tree>
+                            <list>
                                 <field name="tenancy_seq" />
                                 <field name="tenancy_id" />
                                 <field name="property_type" />
@@ -29,12 +29,12 @@
                                 <field name="total_rent" />
                                 <field name="broker_invoice_id"
                                     widget="many2one_clickable" readonly="1" />
-                            </tree>
+                            </list>
                         </field>
                     </page>
                     <page string="Sale Contract" invisible="user_type != 'broker'">
                         <field name="property_sold_ids">
-                            <tree>
+                            <list>
                                 <field name="sold_seq" />
                                 <field name="date" />
                                 <field name="customer_id" />
@@ -51,7 +51,7 @@
                                     decoration-primary="broker_bill_payment_state=='partial'"
                                     decoration-warning="broker_bill_payment_state=='reversed'"
                                 />
-                            </tree>
+                            </list>
                         </field>
                     </page>
                 </xpath>
@@ -70,7 +70,7 @@
             <field name="res_model">res.partner</field>
             <field name="domain">[('user_type','=','landlord')]</field>
             <field name="context">{'default_user_type':'landlord'}</field>
-            <field name="view_mode">kanban,tree,form,activity</field>
+            <field name="view_mode">kanban,list,form,activity</field>
         </record>
 
         <record id="customer_details_action" model="ir.actions.act_window">
@@ -79,7 +79,7 @@
             <field name="res_model">res.partner</field>
             <field name="domain">[('user_type','=','customer')]</field>
             <field name="context">{'default_user_type':'customer'}</field>
-            <field name="view_mode">kanban,tree,form,activity</field>
+            <field name="view_mode">kanban,list,form,activity</field>
         </record>
 
         <record id="broker_details_action" model="ir.actions.act_window">
@@ -88,7 +88,7 @@
             <field name="res_model">res.partner</field>
             <field name="domain">[('user_type','=','broker')]</field>
             <field name="context">{'default_user_type':'broker'}</field>
-            <field name="view_mode">kanban,tree,form,activity</field>
+            <field name="view_mode">kanban,list,form,activity</field>
         </record>
     </data>
 </odoo>

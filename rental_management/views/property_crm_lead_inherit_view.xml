@@ -110,7 +110,7 @@
             <field name="res_model">crm.lead</field>
             <field name="domain">[('type','=','opportunity')]</field>
             <field name="context">{'default_type':'opportunity'}</field>
-            <field name="view_mode">tree,form,kanban,activity</field>
+            <field name="view_mode">list,form,kanban,activity</field>
         </record>
     </data>
 </odoo>

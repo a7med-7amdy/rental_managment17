@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="cancel_contract_wizard_form_view" model="ir.ui.view">
+        <field name="name">cancel.contract.wizard.form</field>
+        <field name="model">cancel.contract.wizard</field>
+        <field name="arch" type="xml">
+            <form string="Cancel Rental Contract">
+                <group>
+                    <field name="tenancy_id"/>
+                    <field name="reason" placeholder="Explain why this contract is being cancelled..."/>
+                </group>
+                <div class="alert alert-warning" role="alert">
+                    Posted invoices are preserved and must be handled through the normal credit-note process.
+                </div>
+                <footer>
+                    <button name="action_confirm_cancel" string="Cancel Contract" type="object" class="btn-danger"/>
+                    <button string="Discard" special="cancel" class="btn-secondary"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+
+    <record id="cancel_contract_wizard_action" model="ir.actions.act_window">
+        <field name="name">Cancel Rental Contract</field>
+        <field name="res_model">cancel.contract.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+    </record>
+</odoo>

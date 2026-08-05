@@ -1,4 +1,5 @@
 from odoo import fields, api, models
+from odoo.fields import Command
 
 
 class BookingWizard(models.TransientModel):
@@ -68,7 +69,7 @@ class BookingWizard(models.TransientModel):
         return res
 
     def create_booking_action(self):
-        invoice_post_type = self.env['ir.config_parameter'].sudo().get_param(
+        invoice_post_type = self.env['ir.config_parameter'].get_param(
             'rental_management.invoice_post_type')
         self.customer_id.user_type = "customer"
         lead = self._context.get('from_crm')
@@ -100,14 +101,14 @@ class BookingWizard(models.TransientModel):
                 'quantity': 1,
                 'price_unit': self.book_price
             }
-            invoice_lines = [(0, 0, record)]
+            invoice_lines = [Command.create(record)]
             data = {
                 'partner_id': booking_id.customer_id.id,
                 'move_type': 'out_invoice',
-                'invoice_date': fields.date.today(),
+                'invoice_date': fields.Date.today(),
                 'invoice_line_ids': invoice_lines
             }
-            book_invoice_id = self.env['account.move'].sudo().create(data)
+            book_invoice_id = self.env['account.move'].create(data)
             book_invoice_id.sold_id = booking_id.id
             if invoice_post_type == 'automatically':
                 book_invoice_id.action_post()
@@ -120,7 +121,7 @@ class BookingWizard(models.TransientModel):
             'name': 'Property Booking',
             'res_model': 'property.vendor',
             'res_id': booking_id.id,
-            'view_mode': 'form,tree',
+            'view_mode': 'form,list',
             'target': 'current'
         }
 

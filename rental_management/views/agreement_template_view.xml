@@ -26,16 +26,16 @@
             <field name="name">agreement.template.view.tree</field>
             <field name="model">agreement.template</field>
             <field name="arch" type="xml">
-                <tree>
+                <list>
                     <field name="name"/>
-                </tree>
+                </list>
             </field>
         </record>
         <record id="agreement_template_action" model="ir.actions.act_window">
             <field name="name">Agreement Templates</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">agreement.template</field>
-            <field name="view_mode">tree,form</field>
+            <field name="view_mode">list,form</field>
         </record>
     </data>
 </odoo>

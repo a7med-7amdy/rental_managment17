@@ -5,13 +5,13 @@
             <field name="name">property.document.tree.view</field>
             <field name="model">property.documents</field>
             <field name="arch" type="xml">
-                <tree string="Document" editable="bottom">
+                <list string="Document" editable="bottom">
                     <field name="property_id"/>
                     <field name="document_date"/>
                     <field name="doc_type"/>
                     <field name="file_name" column_invisible="1"/>
                     <field name="document" filename="file_name" widget="binary"/>
-                </tree>
+                </list>
             </field>
         </record>
         <record id="property_document_kanban_view" model="ir.ui.view">
@@ -21,7 +21,7 @@
                 <kanban string="Kanban" class="">
                     <field name="id"/>
                     <templates>
-                        <t t-name="kanban-box">
+                        <t t-name="card">
                             <div class="row oe_kanban_global_click" style="max-width:250px !important;">
                                 <div class="col-12">
                                     <img t-att-src="kanban_image('property.documents', 'document', record.id.raw_value)"
@@ -38,7 +38,7 @@
             <field name="name">Document</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">property.documents</field>
-            <field name="view_mode">kanban,tree</field>
+            <field name="view_mode">kanban,list</field>
         </record>
     </data>
 </odoo>

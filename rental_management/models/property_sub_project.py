@@ -133,27 +133,38 @@ class PropertySubProject(models.Model):
 
     # Unlink
     def unlink(self):
-        for rec in self:
-            if rec.property_unit_ids:
+        for subproject in self:
+            if subproject.property_unit_ids:
                 raise ValidationError(
-                    _("Cannot delete subproject, please delete corresponding units before deletion"))
-            else:
-                return super(PropertySubProject, self).unlink()
+                    _("Cannot delete subproject, please delete corresponding units before deletion")
+                )
+        return super().unlink()
 
     # Compute
     # Count
+    @api.depends('property_unit_ids.stage')
     def compute_count(self):
-        for rec in self:
-            rec.document_count = self.env["subproject.document"].search_count(
-                [("subproject_id", "=", rec.id)])
-            rec.unit_count = self.env['property.details'].search_count(
-                [('subproject_id', '=', rec.id)])
-            rec.available_unit_count = self.env['property.details'].search_count(
-                [('subproject_id', '=', rec.id), ('stage', '=', 'available')])
-            rec.sold_count = self.env['property.details'].search_count(
-                [('subproject_id', '=', rec.id), ('stage', 'in', ['sale', 'sold'])])
-            rec.rent_count = self.env['property.details'].search_count(
-                [('subproject_id', '=', rec.id), ('stage', '=', 'on_lease')])
+        document_groups = self.env['subproject.document']._read_group(
+            [('subproject_id', 'in', self.ids)], ['subproject_id'], ['__count']
+        ) if self.ids else []
+        document_map = {subproject.id: count for subproject, count in document_groups}
+        property_groups = self.env['property.details']._read_group(
+            [('subproject_id', 'in', self.ids)], ['subproject_id', 'stage'], ['__count']
+        ) if self.ids else []
+        totals = {}
+        stages = {}
+        for subproject, stage, count in property_groups:
+            totals[subproject.id] = totals.get(subproject.id, 0) + count
+            stages[(subproject.id, stage)] = count
+        for subproject in self:
+            subproject.document_count = document_map.get(subproject.id, 0)
+            subproject.unit_count = totals.get(subproject.id, 0)
+            subproject.available_unit_count = stages.get((subproject.id, 'available'), 0)
+            subproject.sold_count = (
+                stages.get((subproject.id, 'sale'), 0)
+                + stages.get((subproject.id, 'sold'), 0)
+            )
+            subproject.rent_count = stages.get((subproject.id, 'on_lease'), 0)
 
     # Valuation Calculation
     @api.depends('sale_lease')
@@ -165,13 +176,13 @@ class PropertySubProject(models.Model):
             total_maintenance = 0.0
             total_collection = 0.0
             scope_of_collection = 0.0
-            properties = self.env['property.details'].sudo()
+            properties = self.env['property.details']
             project_domain = [('subproject_id', '=', rec.id)]
-            properties_ids = self.env['property.details'].sudo().search(
+            properties_ids = self.env['property.details'].search(
                 project_domain).mapped('id')
-            properties_sale = self.env['property.vendor'].sudo().search(
+            properties_sale = self.env['property.vendor'].search(
                 [('property_id', 'in', properties_ids)])
-            properties_tenancy = self.env['tenancy.details'].sudo().search(
+            properties_tenancy = self.env['tenancy.details'].search(
                 [('property_id', 'in', properties_ids)])
             if rec.sale_lease == 'sale':
                 sale_domain = project_domain + \
@@ -244,6 +255,7 @@ class PropertySubProject(models.Model):
     # Action Button
     # Smart Button
     def action_document_count(self):
+        self.ensure_one()
         return {
             "name": "Documents",
             "type": "ir.actions.act_window",
@@ -255,6 +267,7 @@ class PropertySubProject(models.Model):
         }
 
     def action_view_unit(self):
+        self.ensure_one()
         return {
             "name": "Units",
             "type": "ir.actions.act_window",
@@ -266,6 +279,7 @@ class PropertySubProject(models.Model):
         }
 
     def action_view_available_unit(self):
+        self.ensure_one()
         return {
             "name": "Available Units",
             "type": "ir.actions.act_window",
@@ -277,6 +291,7 @@ class PropertySubProject(models.Model):
         }
 
     def action_view_sold_unit(self):
+        self.ensure_one()
         return {
             "name": "Sold / Sale Units",
             "type": "ir.actions.act_window",
@@ -288,6 +303,7 @@ class PropertySubProject(models.Model):
         }
 
     def action_view_rent_unit(self):
+        self.ensure_one()
         return {
             "name": "Rent Units",
             "type": "ir.actions.act_window",
@@ -300,6 +316,7 @@ class PropertySubProject(models.Model):
 
     # G-map Location
     def action_gmap_location(self):
+        self.ensure_one()
         if self.longitude and self.latitude:
             longitude = self.longitude
             latitude = self.latitude

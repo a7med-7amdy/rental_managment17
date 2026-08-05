@@ -29,17 +29,17 @@
             <field name="name">contract.duration.tree.view</field>
             <field name="model">contract.duration</field>
             <field name="arch" type="xml">
-                <tree string="Duration">
+                <list string="Duration">
                     <field name="duration"/>
                     <field name="month"/>
-                </tree>
+                </list>
             </field>
         </record>
         <record id="contract_duration_action" model="ir.actions.act_window">
             <field name="name">Contract Durations</field>
             <field name="type">ir.actions.act_window</field>
             <field name="res_model">contract.duration</field>
-            <field name="view_mode">tree,form</field>
+            <field name="view_mode">list,form</field>
         </record>
     </data>
 </odoo>
