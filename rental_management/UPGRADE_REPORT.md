@@ -476,3 +476,11 @@ Runtime acceptance remains subject to executing the clean-install and upgrade co
 - Removed duplicate display labels reported during Odoo model reflection.
 - Replaced legacy-hostile SQL checks with Python validation and an upgrade-safe migration.
 - Added `migrations/19.0.1.0.2/` without changing technical fields or business data.
+
+## Hotfix 19.0.1.0.3 — Odoo 19 product data compatibility
+
+- Replaced removed external ID `product.product_category_all` with `product.product_category_services`.
+- Replaced removed product field `detailed_type` with `type` in `data/property_product_data.xml`.
+- Kept all module-owned XML IDs unchanged for safe installation and upgrade behavior.
+
+- Added `product` as an explicit dependency instead of relying on transitive dependencies.

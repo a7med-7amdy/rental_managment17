@@ -249,3 +249,7 @@ The `19.0.1.0.2` pre-migration checks for and drops only these obsolete constrai
 - `tenancy_service_line_service_price_non_negative`
 
 They were removed because an existing database can contain valid incomplete draft or historical rows. Business validation continues in Python on record changes and contract activation. No rows are deleted or rewritten.
+
+## 19.0.1.0.3 product data note
+
+The legacy root-category external ID `product.product_category_all` was removed in Odoo 19. The module's Property category is now created under the standard Services category using `product.product_category_services`. Existing module XML IDs and product references remain unchanged.

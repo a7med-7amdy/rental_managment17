@@ -303,3 +303,12 @@ Old tree/attrs/states patterns: 0
 ```
 
 The Odoo 19 clean-install and upgrade commands were not executed locally because `odoo-bin`, PostgreSQL, and Odoo 19 Enterprise are not available in this workspace.
+
+## Static verification added for 19.0.1.0.3
+
+- Confirmed no `product.product_category_all` reference remains.
+- Confirmed no `<field name="detailed_type">` remains.
+- Confirmed `product.product_category_services` is used by the custom Property category.
+- Confirmed all seven rental/maintenance products use `<field name="type">service</field>`.
+
+- Confirmed `product` is declared explicitly in the manifest dependencies.
