@@ -8,7 +8,7 @@
         'maintenance, recurring invoices, commissions, and customer portal workflows.'
     ),
     'summary': 'Property Sale and Rental Management',
-    'version': '19.0.1.0.10',
+    'version': '19.0.1.0.11',
     'author': 'TechKhedut Inc.',
     'company': 'TechKhedut Inc.',
     'maintainer': 'TechKhedut Inc.',
@@ -19,6 +19,7 @@
         # security
         'security/groups.xml',
         'security/ir.model.access.csv',
+        'security/maintenance_access.xml',
         'security/security.xml',
         # Data
         'data/ir_cron.xml',

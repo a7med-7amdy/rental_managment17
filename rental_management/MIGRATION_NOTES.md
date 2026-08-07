@@ -1,13 +1,22 @@
-# MIGRATION NOTES — 19.0.1.0.10
+# MIGRATION NOTES — 19.0.1.0.11
 
-No schema or data migration is required for this hotfix.
+## Backup
 
-The change is an ACL update plus test coverage. Run a normal module upgrade so Odoo reloads `security/ir.model.access.csv`.
+Take a full database and filestore backup before upgrading a production database.
 
-Recommended procedure:
-1. Back up the database before upgrade.
-2. Deploy version 19.0.1.0.10.
-3. Upgrade `rental_management`.
-4. Run post-install tests.
-5. Confirm Rental Officer and Rental Manager can create maintenance requests but cannot delete them.
-6. Confirm Portal users can create requests only for their own running rental contracts.
+## New migration
+
+`migrations/19.0.1.0.11/post-migration.py` verifies that `maintenance.request` has effective ACL records for:
+
+- `base.group_user`: read/write/create
+- `base.group_portal`: read/create
+
+The migration does not delete contracts, properties, invoices, maintenance requests, or accounting entries.
+
+## Security behavior
+
+A base internal user can retain standard non-rental Maintenance behavior. A request linked to `tenancy_id` is additionally protected by Python authorization: only Rental Officer/Manager may link internal requests, and Portal users may link only their own active contract.
+
+## No core modification
+
+The Odoo `mail` manifest RST warning is intentionally not patched because modifying Odoo Core is outside this module's upgrade policy.

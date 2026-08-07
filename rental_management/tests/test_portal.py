@@ -36,7 +36,7 @@ class TestPortalOwnership(RentalCommon):
             tenancy_id=cls.tenant_b.id,
             activate=True,
         )
-        cls.maintenance_b = cls.env["maintenance.request"].create(
+        cls.maintenance_b = cls.env["maintenance.request"].sudo().create(
             {
                 "name": "Private B Request",
                 "tenancy_id": cls.contract_b.id,

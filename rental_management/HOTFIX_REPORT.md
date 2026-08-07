@@ -1,22 +1,29 @@
-# HOTFIX REPORT — Odoo 19.0.1.0.10
+# HOTFIX REPORT — rental_management 19.0.1.0.11
 
 ## Runtime issue addressed
-Odoo.sh completed 32 rental_management tests with 0 assertion failures and 2 runtime errors. Both errors were AccessError exceptions while creating `maintenance.request` records.
 
-## Root cause
-The rental lifecycle intentionally allows Rental Officer and Rental Manager users to create maintenance requests, but the module relied on access rights inherited from Odoo Maintenance instead of declaring that capability explicitly. The target Odoo.sh database did not grant create access to those rental users, so both the portal ownership fixture (whose shared test user is elevated to Rental Manager) and the explicit manager security test failed.
+The Odoo.sh run on 2026-08-07 reached the post-install test suite with 0 failed assertions and 3 runtime errors. All three errors had the same root cause: `maintenance.request` create access was not effective for the users used by the rental tests, including Rental Officer and Rental Manager.
 
-## Permanent fix
-- Added explicit ACL for `rental_management.property_rental_officer` on `maintenance.request`: read/write/create, no unlink.
-- Added explicit ACL for `rental_management.property_rental_manager` on `maintenance.request`: read/write/create, no unlink.
-- Kept the existing Portal ACL limited to read/create and protected by the portal ownership record rule.
-- Kept the global allowed-company record rule for `maintenance.request`.
-- Did not grant Maintenance Team administration to rental users.
-- Did not use `sudo()` to create maintenance requests.
-- Added regression coverage proving a Rental Officer can create a rental maintenance request with the default team.
+## Root-cause correction
 
-## Why this is safer
-ACLs are now owned by the rental module instead of depending on implementation details of another module. The user can create/update operational maintenance requests but cannot delete them, preserving history. Team configuration remains restricted to Maintenance administrators.
+1. Removed `maintenance.request` ACL rows from the generic CSV security file to avoid relying on an inherited-core-model ACL definition that was demonstrably ineffective on the target database.
+2. Added `security/maintenance_access.xml` with fresh, updateable XML IDs:
+   - Internal users: read/write/create, no unlink granted by this module.
+   - Portal users: read/create, no write/unlink granted by this module.
+3. Added `migrations/19.0.1.0.11/post-migration.py` to verify/repair these ACL records on upgraded databases.
+4. Added server-side rental authorization in `models/maintenance.py`:
+   - Portal may create only against its own active rental contract.
+   - Internal users may link a maintenance request to a rental contract only when they are Rental Officer or Rental Manager.
+   - Company and property must match the selected rental contract.
+   - Missing property/company/landlord values are safely derived from the contract.
+5. Kept Maintenance Team administration separate; Rental Manager does not receive Equipment Manager rights.
+6. Portal ownership fixture creation now uses sudo only for fixture preparation; actual portal create behavior remains tested without sudo.
 
-## Unrelated log warning
-The repeated docutils warning around `res.partner.email_normalized` is not sourced by this module: its manifest description is a single plain string and there are no multiline RST/help strings in `res_partner.py`. It is non-fatal and Odoo continues through module loading and tests after it.
+## Odoo upstream warning
+
+The recurring docutils messages around `res.partner.email_normalized` (`Unexpected indentation` / `Block quote ends without a blank line`) match a known Odoo 19 `mail` manifest RST formatting issue. They are not raised by `rental_management` and do not stop registry loading or the test suite. The module does not patch Odoo Core.
+
+## Version
+
+- Previous: 19.0.1.0.10
+- Current: 19.0.1.0.11

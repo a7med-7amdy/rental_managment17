@@ -98,6 +98,23 @@ class TestRentalAccessRights(RentalCommon):
         self.assertTrue(request.maintenance_team_id)
         self.assertEqual(request.tenancy_id, contract)
 
+
+    def test_maintenance_model_create_acl_is_effective_for_rental_roles(self):
+        self.assertTrue(self.env["maintenance.request"].with_user(self.officer).has_access("create"))
+        self.assertTrue(self.env["maintenance.request"].with_user(self.manager).has_access("create"))
+
+    def test_internal_non_rental_user_cannot_link_request_to_rental_contract(self):
+        contract = self._create_contract(activate=True)
+        with self.assertRaises(AccessError):
+            self.env["maintenance.request"].with_user(self.internal).create(
+                {
+                    "name": "Forbidden Linked Maintenance",
+                    "tenancy_id": contract.id,
+                    "property_id": contract.property_id.id,
+                    "company_id": contract.company_id.id,
+                }
+            )
+
     def test_manager_has_officer_privilege(self):
         self.assertTrue(self.manager.has_group("rental_management.property_rental_officer"))
         self.assertTrue(self.manager.has_group("rental_management.property_rental_manager"))

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <!--
+        Explicit Odoo 19 compatibility ACLs for the inherited core model.
+        These records deliberately use fresh XML IDs and are NOT noupdate so
+        upgrades repair permissions if a previous database lost/overrode them.
+
+        Internal users keep the standard Maintenance behavior (read/write/create)
+        while deletion remains disabled from this module. Rental-specific ownership
+        is enforced by Python validation and record rules.
+    -->
+    <record id="access_maintenance_request_internal_rental_compat_v19" model="ir.model.access">
+        <field name="name">maintenance.request internal rental compatibility</field>
+        <field name="model_id" ref="maintenance.model_maintenance_request"/>
+        <field name="group_id" ref="base.group_user"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="True"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <record id="access_maintenance_request_portal_rental_v19" model="ir.model.access">
+        <field name="name">maintenance.request portal rental</field>
+        <field name="model_id" ref="maintenance.model_maintenance_request"/>
+        <field name="group_id" ref="base.group_portal"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="True"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+</odoo>

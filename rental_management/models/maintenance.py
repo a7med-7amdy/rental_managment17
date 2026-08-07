@@ -3,7 +3,7 @@
 # Part of TechKhedut. See LICENSE file for full copyright and licensing details.
 
 from odoo import _, api, fields, models
-from odoo.exceptions import UserError, ValidationError
+from odoo.exceptions import AccessError, UserError, ValidationError
 from odoo.fields import Command
 
 
@@ -71,11 +71,62 @@ class PropertyMaintenance(models.Model):
             limit=1,
         )
 
+    @api.model
+    def _prepare_rental_request_security(self, vals):
+        """Validate rental ownership/role before creating a linked request.
+
+        Odoo's core maintenance ACLs can differ between deployed 19.0 builds.
+        This module therefore grants the base model permission explicitly, then
+        applies rental-specific authorization here whenever ``tenancy_id`` is used.
+        Non-rental maintenance requests keep the standard Maintenance behavior.
+        """
+        vals = dict(vals)
+        user = self.env.user
+        is_portal = user.has_group("base.group_portal")
+        tenancy_id = vals.get("tenancy_id")
+
+        if is_portal and not tenancy_id:
+            raise AccessError(_("Portal users can only create maintenance requests from one of their rental contracts."))
+
+        if not tenancy_id:
+            return vals
+
+        tenancy = self.env["tenancy.details"].browse(tenancy_id).exists()
+        if not tenancy:
+            raise ValidationError(_("The selected rental contract does not exist."))
+
+        # check_access includes both model ACLs and record rules. For portal users
+        # this is the ownership check; for internal rental users it also enforces
+        # allowed-company isolation.
+        tenancy.check_access("read")
+
+        if is_portal:
+            if tenancy.tenancy_id.commercial_partner_id != user.partner_id.commercial_partner_id:
+                raise AccessError(_("You can only create maintenance requests for your own rental contracts."))
+            if tenancy.contract_type != "running_contract":
+                raise ValidationError(_("Maintenance requests can only be created for an active rental contract."))
+        elif not (
+            user.has_group("rental_management.property_rental_officer")
+            or user.has_group("rental_management.property_rental_manager")
+        ):
+            raise AccessError(_("Only Rental Officers or Rental Managers can create maintenance requests linked to rental contracts."))
+
+        if vals.get("property_id") and vals["property_id"] != tenancy.property_id.id:
+            raise ValidationError(_("Maintenance property must match the rental contract property."))
+        if vals.get("company_id") and vals["company_id"] != tenancy.company_id.id:
+            raise ValidationError(_("Maintenance request and contract companies must match."))
+
+        vals.setdefault("property_id", tenancy.property_id.id)
+        vals.setdefault("company_id", tenancy.company_id.id)
+        if tenancy.property_landlord_id:
+            vals.setdefault("landlord_id", tenancy.property_landlord_id.id)
+        return vals
+
     @api.model_create_multi
     def create(self, vals_list):
         prepared_vals = []
         for incoming in vals_list:
-            vals = dict(incoming)
+            vals = self._prepare_rental_request_security(incoming)
             if not vals.get("maintenance_team_id"):
                 company = self.env["res.company"].browse(vals.get("company_id")).exists() or self.env.company
                 team = self._get_rental_maintenance_team(company)

@@ -26,3 +26,12 @@ This revision continues the Odoo 19 Enterprise migration and addresses the lates
 
 ### Multi-company
 The existing global company rule continues to limit maintenance requests to `allowed_company_ids`.
+
+## 19.0.1.0.11 maintenance ACL hardening
+
+- Added dedicated `security/maintenance_access.xml` with fresh updateable ACL XML IDs for the inherited `maintenance.request` core model.
+- Added post-migration ACL verification for existing databases.
+- Added rental-specific create authorization for internal and portal users.
+- Prevented non-rental internal users from linking Maintenance Requests to rental contracts.
+- Portal requests require ownership and an active rental contract.
+- Kept Maintenance Team administration separate from Rental Manager privileges.
