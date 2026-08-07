@@ -1,51 +1,49 @@
-# Migration Notes — rental_management 19.0.1.0.7
+# Migration Notes — rental_management 19.0.1.0.8
 
 ## Upgrade path
 
-Upgrade from any earlier delivered Odoo 19 revision by replacing the module directory and running:
+Upgrade from 19.0.1.0.7 to 19.0.1.0.8 using the normal module upgrade process.
 
-```bash
-odoo-bin -d <staging_database> -u rental_management --stop-after-init
-```
+## Database impact
 
-Use a recent database and filestore backup. Validate on staging before production.
+This revision has no destructive schema migration.
 
-## Data and schema impact
+It does not rename or delete:
 
-Version `19.0.1.0.7` does not:
+- Models.
+- Existing fields/columns.
+- Selection keys.
+- Existing XML IDs.
+- Contracts.
+- Properties.
+- Accounting invoices/bills.
+- Rental invoice periods.
+- Sequences.
 
-- Rename or remove models.
-- Rename or remove fields.
-- Change Selection keys.
-- Change XML IDs.
-- Delete contracts, properties, schedules, invoices, commissions or maintenance requests.
-- Add a new SQL column or database constraint.
+## Additive data
 
-No new migration directory is required for this hotfix. Existing migration scripts from earlier revisions remain in place.
-
-## Functional reconciliation
-
-Property-stage synchronization now evaluates all non-ended running contracts for each affected property:
+A single shared Maintenance Team is added as module data:
 
 ```text
-Current running contract -> on_lease
-Future running contract only -> booked
-No current/future running contract -> available
+XML ID: rental_management.maintenance_team_rental
+Name: Rental Maintenance
+Company: Shared / False
+noupdate: True
 ```
 
-The update occurs during activation, closure, cancellation and lifecycle cron processing. It does not delete or rewrite contract history.
+It is a fallback only. When an active company-specific Maintenance Team exists, rental maintenance requests use the company-specific team first.
 
-## Pre-upgrade checklist
+## Existing migration scripts
 
-1. Back up database and filestore.
-2. Confirm the current custom module directory is named exactly `rental_management`.
-3. Replace the complete module directory; do not merge individual files into an older copy.
-4. Commit and rebuild Odoo.sh.
-5. Run the focused test suite.
-6. Upgrade a production-data staging copy.
-7. Review properties with simultaneous current and future contracts to confirm `on_lease` precedence.
-8. Review properties with only future contracts to confirm `booked` status.
+The earlier migration scripts under `migrations/19.0.1.0.0/` and `migrations/19.0.1.0.2/` remain unchanged. No `19.0.1.0.8` migration script is required because this hotfix does not rename schema objects or transform existing business data.
 
-## Rollback
+## Recommended production procedure
 
-If the upgrade fails, restore both the database and its matching filestore backup, then restore the previous module commit. Do not restore only one side of the database/filestore pair.
+1. Take a full database and filestore backup.
+2. Deploy 19.0.1.0.8 to a staging branch/database copied from production.
+3. Upgrade `rental_management` with tests enabled.
+4. Confirm the complete rental test suite has zero failures/errors.
+5. Verify an internal user and a portal tenant can create a maintenance request.
+6. Verify tenant/landlord/both broker commission activation creates one rental contract and the expected accounting documents.
+7. Verify dashboard load has no `read_group` deprecation warnings.
+8. Promote the same commit to production only after staging acceptance.

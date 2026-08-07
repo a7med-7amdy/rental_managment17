@@ -8,7 +8,7 @@
         'maintenance, recurring invoices, commissions, and customer portal workflows.'
     ),
     'summary': 'Property Sale and Rental Management',
-    'version': '19.0.1.0.7',
+    'version': '19.0.1.0.8',
     'author': 'TechKhedut Inc.',
     'company': 'TechKhedut Inc.',
     'maintainer': 'TechKhedut Inc.',
@@ -24,6 +24,7 @@
         'data/ir_cron.xml',
         'data/sequence.xml',
         'data/property_product_data.xml',
+        'data/maintenance_data.xml',
         # wizard views
         'wizard/contract_wizard_view.xml',
         'wizard/property_payment_wizard_view.xml',

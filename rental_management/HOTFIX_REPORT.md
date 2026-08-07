@@ -1,70 +1,105 @@
-# Hotfix Report — rental_management 19.0.1.0.7
+# Hotfix Report — rental_management 19.0.1.0.8
 
-## Trigger
+## Runtime trigger
 
-The supplied Odoo.sh Odoo 19 Enterprise run completed module loading, generated the CSS asset bundles, and entered the `rental_management` post-install suite. The runner stopped after five errors with two underlying causes:
-
-1. `tenancy.details._sync_property_stage()` grouped by the Date field `start_date` without a date granularity:
-
-   ```text
-   ValueError: Granularity not set on a date(time) field: 'start_date'
-   ```
-
-2. `test_cross_company_contract_is_rejected` passed a tuple to Odoo's overridden `assertRaises()`:
-
-   ```text
-   TypeError: issubclass() arg 1 must be a class
-   ```
-
-The first root cause affected broker commission and renewal tests because every activation synchronizes the property stage. The second root cause was isolated to the multi-company test implementation.
-
-## Production fix
-
-### Property-stage synchronization
-
-`models/rent_contract.py::_sync_property_stage()` no longer groups by `start_date`.
-
-The method now performs two batched `_read_group()` queries, both grouped only by the Many2one field `property_id`:
-
-- Current contracts: `start_date <= today` and `end_date >= today`.
-- Future reservations: `start_date > today` and `end_date >= today`.
-
-Stage precedence is deterministic:
+The supplied Odoo.sh Odoo 19 Enterprise run completed module loading, asset generation, and the post-install suite. It executed 30 post-tests before shutdown and reported:
 
 ```text
-Current running contract exists  -> on_lease
-No current contract, future exists -> booked
-No current or future contract      -> available
+0 failed, 4 errors
 ```
 
-This retains batched performance and avoids one search per property.
+Those four runtime errors had two root causes:
 
-### Manager activity completion
+1. Three broker commission tests failed because `RentalCommission` defined a custom method named `_check_company(self)`. Odoo 19 core calls `self._check_company(list(vals))` during `write()`, so the custom method unintentionally overrode the ORM API and raised:
 
-Closing or cancelling a contract is already restricted server-side to Rental Managers. Activity completion now uses narrowly scoped elevated access only for the related `mail.activity` records, allowing a manager to complete an activity assigned to another responsible user without granting broad Accounting permissions.
+   ```text
+   TypeError: RentalCommission._check_company() takes 1 positional argument but 2 were given
+   ```
 
-## Test-suite fix
+2. Portal ownership setup failed while creating `maintenance.request` because Odoo 19 requires `maintenance_team_id`, but no readable/default Maintenance Team was available in the test/database context:
 
-Odoo 19's test case override calls `issubclass(exception, AccessError)`, so a tuple cannot be supplied to `assertRaises()`.
+   ```text
+   psycopg2.errors.NotNullViolation: null value in column "maintenance_team_id"
+   ```
 
-The multi-company test now executes the create operation directly, accepts the two legitimate rejection classes (`UserError` or `ValidationError`), and explicitly fails if the cross-company contract is created.
+The same run also emitted three Odoo 19 deprecation warnings for backend calls to `read_group()` in the rental dashboard.
 
-## Regression coverage added
+## Fix 1 — restore Odoo 19 core `_check_company()` behavior
 
-Two lifecycle tests were added:
+The rental commission constraint method was renamed from the reserved/core name:
 
-1. A future running contract marks its property as `booked`.
-2. When a current contract and a future renewal coexist, `on_lease` takes precedence; closing the current contract changes the property to `booked` while preserving the future contract.
+```text
+_check_company
+```
 
-The suite now contains 33 test methods.
+to:
 
-## Other cleanup
+```text
+_check_commission_company
+```
 
-- Removed a duplicate `target` key from the Register Payment action dictionary.
-- Audited every `_read_group()` call for Date/Datetime group-by fields.
-- Audited every test for tuple-based `assertRaises()` usage.
-- No schema, field, XML ID, or business-data migration is required for this hotfix.
+The `@api.constrains("contract_id", "company_id")` behavior is preserved, but Odoo's native `_check_company(fnames=None)` method is no longer shadowed. This allows writes to `broker_bill_id`, `charge_invoice_id`, and any other `check_company=True` relational field to use the standard ORM consistency check.
 
-## Runtime status
+A full source scan confirms that the module contains no custom `def _check_company(...)` override.
 
-The supplied 19.0.1.0.6 Odoo.sh run is the runtime evidence for this report. Version 19.0.1.0.7 has not been executed in this workspace because Odoo 19, PostgreSQL, and `odoo-bin` are not installed here. A new Odoo.sh build is required to execute the remaining tests that were skipped after the five-error threshold.
+## Fix 2 — Maintenance Team fallback for rental/portal requests
+
+Odoo 19 defines `maintenance.request.maintenance_team_id` as required. The rental extension now guarantees a company-compatible team before delegating to core `create()`:
+
+- Prefer an active team belonging to the request company.
+- Otherwise use an active shared team (`company_id = False`).
+- If neither exists, raise a clear `UserError` instead of reaching a PostgreSQL NOT NULL error.
+
+A shared `Rental Maintenance` team is installed as module data with `noupdate="1"` so clean databases have a safe fallback without forcing a company-specific configuration.
+
+The lookup uses narrowly scoped `sudo()` only to resolve the internal Maintenance Team configuration. Creation of the maintenance request itself remains under the caller's ACLs and record rules.
+
+The portal test fixture also creates a normal company Maintenance Team, and a positive regression test verifies that an owning portal tenant can create a request without manually passing `maintenance_team_id`.
+
+## Fix 3 — Odoo 19 backend aggregation API
+
+All remaining backend `read_group()` calls in `models/property_details.py` were migrated to `_read_group()` and their tuple result handling was updated for Odoo 19.
+
+Updated areas include:
+
+- Property stage/type counters.
+- Contract and sale status counters.
+- Rent invoice totals and residual balances.
+- Sold property totals.
+- Top broker statistics.
+- Due/Paid dashboard series.
+
+A full module scan now reports zero `.read_group(` calls.
+
+## Fix 4 — Portal chatter access
+
+The maintenance POST route already verifies contract ownership before creation. Portal users intentionally have read-only access to rental contracts, while `mail.thread.message_post()` requires write access by default.
+
+After successful ownership validation and request creation, only the chatter log operation is elevated with `contract.sudo().message_post(...)`. This prevents a legitimate portal maintenance request from failing after the maintenance record has already been created, without widening portal write rights on the contract.
+
+## Files modified in this revision
+
+```text
+__manifest__.py
+models/rent_contract.py
+models/maintenance.py
+models/property_details.py
+controllers/main.py
+tests/common.py
+tests/test_portal.py
+data/maintenance_data.xml   (new)
+HOTFIX_REPORT.md
+TEST_REPORT.md
+UPGRADE_REPORT.md
+MIGRATION_NOTES.md
+```
+
+## Migration impact
+
+No model, field, selection key, or existing XML ID was renamed. No destructive migration is required for 19.0.1.0.8.
+
+The new Maintenance Team data record is additive and `noupdate="1"`.
+
+## Runtime qualification
+
+The Odoo.sh run supplied for 19.0.1.0.7 is the runtime evidence for the four defects above. Version 19.0.1.0.8 cannot be executed against Odoo 19/PostgreSQL in this workspace, so a new Odoo.sh build remains required to confirm the complete runtime suite after these fixes.

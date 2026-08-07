@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo noupdate="1">
+    <record id="maintenance_team_rental" model="maintenance.team">
+        <field name="name">Rental Maintenance</field>
+        <field name="company_id" eval="False"/>
+        <field name="active" eval="True"/>
+    </record>
+</odoo>

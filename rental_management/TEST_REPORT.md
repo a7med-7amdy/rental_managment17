@@ -1,8 +1,8 @@
-# rental_management — Test Report 19.0.1.0.7
+# rental_management — Test Report 19.0.1.0.8
 
-## 1. Runtime evidence supplied
+## 1. Latest Odoo.sh runtime evidence
 
-Environment evidenced by the uploaded log:
+Environment evidenced by the supplied log:
 
 ```text
 Platform: Odoo.sh
@@ -11,32 +11,34 @@ Module: rental_management
 Post-install tests: enabled
 ```
 
-The run completed registry/module loading and CSS asset generation, then started rental module tests. Six tests were reached before the runner stopped at its five-error threshold.
-
-Reported result:
+The run reached and completed 30 post-tests and reported:
 
 ```text
-0 failed, 5 errors
-remaining tests skipped after max failed tests
+rental_management: 50 tests
+30 post-tests
+0 failed
+4 errors
 ```
 
-The five errors represented two root causes:
+The four errors were:
 
-- Four activations failed in `_sync_property_stage()` because a Date field was passed to `_read_group()` without granularity.
-- One multi-company test failed before executing its assertion because Odoo's `assertRaises()` override does not accept a tuple.
+- 3 × `RentalCommission._check_company()` signature collision with Odoo 19 core.
+- 1 × `maintenance.request.maintenance_team_id` PostgreSQL NOT NULL violation.
 
-## 2. Corrections in 19.0.1.0.7
+The same run produced 3 deprecation warnings from backend `read_group()` calls in the dashboard.
 
-- Removed `start_date` from `_read_group()` group-by specifications.
-- Split current and future contract detection into two property-grouped batch queries.
-- Replaced tuple-based `assertRaises()` with explicit multi-exception handling and a failure assertion.
-- Added current/future property-stage precedence tests.
-- Added a future-reservation stage test.
-- Added narrow manager-only activity completion elevation.
+## 2. Corrections in 19.0.1.0.8
+
+- Renamed the custom commission constraint method so it no longer overrides Odoo core `_check_company(fnames=None)`.
+- Added deterministic Maintenance Team resolution for rental maintenance requests.
+- Added a shared `Rental Maintenance` team as safe clean-install fallback data.
+- Migrated every remaining backend `.read_group()` call to `_read_group()` with Odoo 19 tuple result handling.
+- Added portal own-request coverage without explicitly supplying a Maintenance Team.
+- Hardened the portal route's chatter logging after ownership validation.
 
 ## 3. Automated tests included
 
-The module now contains **33 test methods** across:
+The module contains **34 Python test methods** across:
 
 ```text
 tests/test_property_lifecycle.py
@@ -50,82 +52,36 @@ tests/test_portal.py
 tests/test_upgrade_data.py
 ```
 
-Coverage includes:
+Coverage includes lifecycle, required fields, contract overlap, monthly/quarterly/yearly/full/manual invoicing, catch-up cron, duplicate prevention, partial periods, renewal, commissions, portal ownership, access rights, and multi-company isolation.
 
-- Property lifecycle and future reservations.
-- Current-contract precedence over a future renewal.
-- Required activation data and overlap rejection.
-- Monthly, quarterly, yearly, full-payment and manual schedules.
-- Catch-up cron and invoice idempotency.
-- Month-end period anchors and partial final periods.
-- Extra services, deposits and maintenance.
-- Renewal dates and old/new links.
-- Tenant, landlord and dual-source broker commissions.
-- Officer/Manager/Internal/Public permissions.
-- Portal ownership isolation.
-- Multi-company record rules, consistency and dashboard scope.
-- Preservation of historical invoice schedules and accounting moves.
+## 4. Static validation executed on 19.0.1.0.8
 
-## 4. Static validation executed
+The following checks were executed on the working tree and are repeated on an independently extracted final ZIP:
 
-The workspace source was checked for:
+- Python AST parse and in-memory compilation.
+- XML parse.
+- Duplicate explicit XML ID detection.
+- CSV structural validation.
+- PO parsing through Babel.
+- Manifest version/dependency/data/asset path validation.
+- JavaScript syntax through Node.js.
+- Cron method target validation.
+- `type="object"` button method target validation.
+- Duplicate class member/method scan.
+- Deprecated/invalid pattern scan.
+- Package junk scan (`__pycache__`, `.pyc`, `.DS_Store`).
 
-- Python AST parsing and in-memory compilation.
-- Duplicate class methods/field assignments and duplicate dictionary keys.
-- Every `_read_group()` group-by list, specifically bare Date/Datetime fields.
-- Every `assertRaises()` call, specifically tuple exceptions.
-- Manifest syntax, version, dependencies and referenced files.
-- XML parsing and duplicate explicit XML IDs.
-- CSV row structure.
-- PO translation parsing.
-- JavaScript syntax using `node --check`.
-- Cron method targets.
-- Object-button method targets.
-- Package-relative import targets.
-- Deprecated Odoo patterns and obsolete product references.
-- Cache, compiled and temporary files.
-
-Workspace result:
+Explicit compatibility guards include:
 
 ```text
-Python files: 45 passed
-XML files: 56 passed
-Explicit XML IDs: 273, no duplicates
-CSV files: 1 passed
-PO files: 6 passed
-JavaScript files: 1 passed
-Cron targets: 8 passed
-Object buttons: 71 passed
-Automated test methods: 33
-Bare Date/Datetime _read_group group-bys: 0
-Tuple assertRaises patterns: 0
-Static errors: 0
+custom def _check_company(...): 0
+.read_group(...):                0
+<tree> architecture:             0
+view_mode="tree":                0
+attrs= modifiers:                0
+states= modifiers:               0
 ```
 
-## 5. Runtime qualification
+## 5. Runtime status
 
-Version 19.0.1.0.7 was not executed locally because the workspace does not contain Odoo 19, PostgreSQL, or `odoo-bin`. Static success is not presented as runtime success.
-
-Required acceptance commands on Odoo.sh/staging:
-
-```bash
-odoo-bin \
-  -d rental_test_clean \
-  -i rental_management \
-  --stop-after-init \
-  --test-enable \
-  --test-tags /rental_management \
-  --log-level=test
-```
-
-```bash
-odoo-bin \
-  -d rental_test_upgrade \
-  -u rental_management \
-  --stop-after-init \
-  --test-enable \
-  --test-tags /rental_management \
-  --log-level=test
-```
-
-The next run must be reviewed because the previous test process skipped the suite remainder after reaching five errors.
+The four failures in the supplied 19.0.1.0.7 Odoo.sh run are addressed in 19.0.1.0.8. A new Odoo.sh build is still required before claiming that all 19.0.1.0.8 runtime tests pass, because this workspace does not contain a runnable Odoo 19 Enterprise/PostgreSQL environment.

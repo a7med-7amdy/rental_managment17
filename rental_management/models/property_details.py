@@ -804,15 +804,15 @@ class PropertyDetails(models.Model):
         today = fields.Date.context_today(self)
 
         def grouped_counts(model, group_field, domain=None):
-            result = {}
-            groups = model.read_group((domain or []) + company_domain, [group_field], [group_field], lazy=False)
-            for group in groups:
-                key = group.get(group_field)
-                if isinstance(key, tuple):
-                    key = key[0]
-                if key:
-                    result[key] = group.get("__count", 0)
-            return result
+            return {
+                key: count
+                for key, count in model._read_group(
+                    (domain or []) + company_domain,
+                    groupby=[group_field],
+                    aggregates=["__count"],
+                )
+                if key
+            }
 
         stage_counts = grouped_counts(property_model, "stage")
         type_counts = grouped_counts(property_model, "type")
@@ -825,16 +825,14 @@ class PropertyDetails(models.Model):
             ("state", "=", "posted"),
         ]
         if move_model.browse().has_access("read"):
-            rent_aggregates = move_model.read_group(
+            rent_aggregates = move_model._read_group(
                 rent_moves_domain,
-                ["amount_total:sum", "amount_residual:sum"],
-                [],
+                groupby=[],
+                aggregates=["amount_total:sum", "amount_residual:sum"],
             )
-            rent_totals = rent_aggregates[0] if rent_aggregates else {}
-            collected_amount = (rent_totals.get("amount_total", 0.0) or 0.0) - (
-                rent_totals.get("amount_residual", 0.0) or 0.0
-            )
-            outstanding_amount = rent_totals.get("amount_residual", 0.0) or 0.0
+            amount_total, amount_residual = rent_aggregates[0] if rent_aggregates else (0.0, 0.0)
+            collected_amount = (amount_total or 0.0) - (amount_residual or 0.0)
+            outstanding_amount = amount_residual or 0.0
             overdue_invoice = move_model.search_count(
                 rent_moves_domain
                 + [("invoice_date_due", "<", today), ("amount_residual", ">", 0)]
@@ -861,10 +859,12 @@ class PropertyDetails(models.Model):
             else 0.0
         )
 
-        sold_total_group = sale_model.read_group(
-            company_domain + [("stage", "=", "sold")], ["sale_price:sum"], []
+        sold_total_group = sale_model._read_group(
+            company_domain + [("stage", "=", "sold")],
+            groupby=[],
+            aggregates=["sale_price:sum"],
         )
-        sold_total = (sold_total_group[0].get("sale_price", 0.0) if sold_total_group else 0.0) or 0.0
+        sold_total = (sold_total_group[0][0] if sold_total_group else 0.0) or 0.0
         pending_invoice_sale = (
             move_model.search_count(
                 company_domain
@@ -949,18 +949,18 @@ class PropertyDetails(models.Model):
         company_domain = [("company_id", "=", self.env.company.id)]
 
         def broker_data(model, extra_domain):
-            groups = model.read_group(
+            groups = model._read_group(
                 company_domain + extra_domain,
-                ["broker_id"],
-                ["broker_id"],
+                groupby=["broker_id"],
+                aggregates=["__count"],
                 limit=5,
-                orderby="broker_id_count desc",
+                order="__count desc",
             )
             names, values = [], []
-            for group in groups:
-                if group.get("broker_id"):
-                    names.append(group["broker_id"][1])
-                    values.append(group.get("broker_id_count", group.get("__count", 0)))
+            for broker, count in groups:
+                if broker:
+                    names.append(broker.display_name)
+                    values.append(count)
             return names, values
 
         tenancy_names, tenancy_values = broker_data(
@@ -985,14 +985,13 @@ class PropertyDetails(models.Model):
             ]
 
         def totals(domain):
-            groups = move_model.read_group(
+            groups = move_model._read_group(
                 company_domain + domain + [("state", "=", "posted")],
-                ["payment_state", "amount_total:sum", "amount_residual:sum"],
-                ["payment_state"],
-                lazy=False,
+                groupby=["payment_state"],
+                aggregates=["amount_total:sum", "amount_residual:sum"],
             )
-            total = sum((group.get("amount_total", 0.0) or 0.0) for group in groups)
-            due = sum((group.get("amount_residual", 0.0) or 0.0) for group in groups)
+            total = sum((amount_total or 0.0) for _payment_state, amount_total, _amount_residual in groups)
+            due = sum((amount_residual or 0.0) for _payment_state, _amount_total, amount_residual in groups)
             return {"Due": due, "Paid": total - due}
 
         sold = totals([("sold_id", "!=", False)])

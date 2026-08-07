@@ -1306,7 +1306,7 @@ class RentalCommission(models.Model):
     )
 
     @api.constrains("contract_id", "company_id")
-    def _check_company(self):
+    def _check_commission_company(self):
         for commission in self:
             if commission.company_id != commission.contract_id.company_id:
                 raise ValidationError(_("Commission and contract must belong to the same company."))

@@ -31,6 +31,41 @@ class PropertyMaintenance(models.Model):
     invoice_id = fields.Many2one("account.move", string="Invoice", copy=False, check_company=True)
     invoice_state = fields.Boolean(string="Invoice Created", compute="_compute_invoice_state", store=True)
 
+
+    @api.model
+    def _get_rental_maintenance_team(self, company):
+        """Return a company-compatible maintenance team without leaking team data."""
+        team_model = self.env["maintenance.team"].sudo().with_company(company)
+        team = team_model.search(
+            [("company_id", "=", company.id), ("active", "=", True)],
+            order="id",
+            limit=1,
+        )
+        if not team:
+            team = team_model.search(
+                [("company_id", "=", False), ("active", "=", True)],
+                order="id",
+                limit=1,
+            )
+        return team
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        prepared_vals = []
+        for incoming in vals_list:
+            vals = dict(incoming)
+            if not vals.get("maintenance_team_id"):
+                company = self.env["res.company"].browse(vals.get("company_id")).exists() or self.env.company
+                team = self._get_rental_maintenance_team(company)
+                if not team:
+                    raise UserError(
+                        _("Configure at least one Maintenance Team for company %s before creating a maintenance request.")
+                        % company.display_name
+                    )
+                vals["maintenance_team_id"] = team.id
+            prepared_vals.append(vals)
+        return super().create(prepared_vals)
+
     @api.depends("invoice_id")
     def _compute_invoice_state(self):
         for request_record in self:

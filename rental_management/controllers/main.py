@@ -245,7 +245,11 @@ class RentalPortalWebsite(http.Controller):
                 "description": description,
             }
         )
-        contract.message_post(body=_("Portal maintenance request %s created.") % maintenance.display_name)
+        # Ownership was verified above. Elevate only the chatter write because portal
+        # users intentionally have read-only access to rental contracts.
+        contract.sudo().message_post(
+            body=_("Portal maintenance request %s created.") % maintenance.display_name
+        )
         return request.redirect("/my/maintenance-request/?created=1")
 
     @http.route(["/my/rent-invoices/"], type="http", auth="user", website=True)

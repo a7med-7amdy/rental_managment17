@@ -56,6 +56,18 @@ class TestPortalOwnership(RentalCommon):
         with self.assertRaises(AccessError):
             self.maintenance_b.with_user(self.portal_a).check_access("read")
 
+    def test_portal_can_create_request_for_own_contract_with_default_team(self):
+        maintenance = self.env["maintenance.request"].with_user(self.portal_a).create(
+            {
+                "name": "Own Portal Request",
+                "tenancy_id": self.contract_a.id,
+                "property_id": self.contract_a.property_id.id,
+                "company_id": self.contract_a.company_id.id,
+            }
+        )
+        self.assertTrue(maintenance.maintenance_team_id)
+        self.assertEqual(maintenance.tenancy_id, self.contract_a)
+
     def test_portal_cannot_create_request_for_other_contract(self):
         with self.assertRaises(AccessError):
             self.env["maintenance.request"].with_user(self.portal_a).create(
