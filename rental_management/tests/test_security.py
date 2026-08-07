@@ -70,6 +70,20 @@ class TestRentalAccessRights(RentalCommon):
                 {"name": "Forbidden Rental Team", "company_id": self.env.company.id}
             )
 
+    def test_rental_officer_can_create_maintenance_request_with_default_team(self):
+        property_record = self._create_property("Officer Maintenance Unit")
+        contract = self._create_contract(property_id=property_record, activate=True)
+        request = self.env["maintenance.request"].with_user(self.officer).create(
+            {
+                "name": "Officer Rental Maintenance",
+                "tenancy_id": contract.id,
+                "property_id": property_record.id,
+                "company_id": self.env.company.id,
+            }
+        )
+        self.assertTrue(request.maintenance_team_id)
+        self.assertEqual(request.tenancy_id, contract)
+
     def test_rental_manager_can_create_maintenance_request_with_default_team(self):
         property_record = self._create_property("Manager Maintenance Unit")
         contract = self._create_contract(property_id=property_record, activate=True)

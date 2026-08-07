@@ -1,20 +1,22 @@
-# Hotfix Report — rental_management 19.0.1.0.9
+# HOTFIX REPORT — Odoo 19.0.1.0.10
 
-## Runtime evidence reviewed
-The Odoo.sh run dated 2026-08-07 reached post-install test setup after the module, views, security, data and assets loaded successfully. Five test classes stopped in the same shared fixture because `tests/common.py` attempted to create `maintenance.team` with a Rental Manager test user. In Odoo 19, normal internal users have read-only access to maintenance teams; creation is restricted to Maintenance / Equipment Manager.
+## Runtime issue addressed
+Odoo.sh completed 32 rental_management tests with 0 assertion failures and 2 runtime errors. Both errors were AccessError exceptions while creating `maintenance.request` records.
 
-## Root fix
-- Removed per-test-class creation of `maintenance.team`.
-- Reused the stable module-owned XML record `rental_management.maintenance_team_rental`.
-- Did **not** grant Rental Manager the Maintenance/Equipment Manager group.
-- Kept rental maintenance requests creatable by ordinary internal rental users through Odoo's normal `maintenance.request` ACL.
-- Hardened `_get_rental_maintenance_team()` to prefer a company-specific active team, then the stable shared rental team, then any legacy shared team.
-- The team lookup uses `sudo()` only to resolve configuration; the request itself continues through the caller's normal ACLs and record rules.
+## Root cause
+The rental lifecycle intentionally allows Rental Officer and Rental Manager users to create maintenance requests, but the module relied on access rights inherited from Odoo Maintenance instead of declaring that capability explicitly. The target Odoo.sh database did not grant create access to those rental users, so both the portal ownership fixture (whose shared test user is elevated to Rental Manager) and the explicit manager security test failed.
 
-## Regression coverage added
-- Rental Manager cannot create Maintenance Team configuration.
-- Rental Manager can create a rental Maintenance Request without passing a team explicitly.
-- Existing portal regression continues to verify a portal tenant can create a request only for their own running rental contract and receives a default team.
+## Permanent fix
+- Added explicit ACL for `rental_management.property_rental_officer` on `maintenance.request`: read/write/create, no unlink.
+- Added explicit ACL for `rental_management.property_rental_manager` on `maintenance.request`: read/write/create, no unlink.
+- Kept the existing Portal ACL limited to read/create and protected by the portal ownership record rule.
+- Kept the global allowed-company record rule for `maintenance.request`.
+- Did not grant Maintenance Team administration to rental users.
+- Did not use `sudo()` to create maintenance requests.
+- Added regression coverage proving a Rental Officer can create a rental maintenance request with the default team.
 
 ## Why this is safer
-The test suite now matches production security instead of making production security weaker merely to satisfy test setup.
+ACLs are now owned by the rental module instead of depending on implementation details of another module. The user can create/update operational maintenance requests but cannot delete them, preserving history. Team configuration remains restricted to Maintenance administrators.
+
+## Unrelated log warning
+The repeated docutils warning around `res.partner.email_normalized` is not sourced by this module: its manifest description is a single plain string and there are no multiline RST/help strings in `res_partner.py`. It is non-fatal and Odoo continues through module loading and tests after it.

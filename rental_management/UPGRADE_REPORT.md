@@ -1,76 +1,28 @@
-# rental_management — Upgrade Report 19.0.1.0.9
+# UPGRADE REPORT — rental_management 19.0.1.0.10
 
-## Version
+This revision continues the Odoo 19 Enterprise migration and addresses the latest Odoo.sh runtime security failure.
 
-```text
-Previous delivered version: 19.0.1.0.7
-Current version: 19.0.1.0.9
-Technical module name: rental_management
-License: OPL-1
-Author retained: TechKhedut Inc.
-```
+## Changed files
+- `__manifest__.py` — version bumped to 19.0.1.0.10
+- `security/ir.model.access.csv` — explicit Rental Officer/Manager access to `maintenance.request`
+- `tests/test_security.py` — added officer maintenance-request regression test
+- Reports updated for this hotfix
 
-## Runtime defects corrected in this revision
+## Security behavior
+### Rental Officer
+- Maintenance Request: read/create/write allowed
+- Maintenance Request: delete denied
+- Maintenance Team administration: denied
 
-### 1. Rental commission / ORM multi-company collision
+### Rental Manager
+- Includes Rental Officer privileges
+- Maintenance Request: read/create/write allowed
+- Maintenance Request: delete denied
+- Maintenance Team administration: denied
 
-`RentalCommission` had a business constraint named `_check_company`. In Odoo 19, `_check_company(fnames=None)` is an ORM method invoked automatically during create/write for company-consistent relational fields.
+### Portal
+- Maintenance Request: read/create only
+- Ownership rule restricts records to the signed-in tenant's contracts
 
-The business constraint has been renamed to `_check_commission_company` while preserving its validation. Core multi-company validation now executes normally when commission accounting documents are linked.
-
-### 2. Required Maintenance Team
-
-Odoo 19 requires a Maintenance Team on every `maintenance.request`. The rental extension now selects an active company team or a shared fallback before calling the core create method. A shared `Rental Maintenance` team is installed for clean databases.
-
-This fixes both backend/test creation and the portal maintenance flow without making the Maintenance Team field optional or changing Odoo core.
-
-### 3. Deprecated Dashboard aggregation
-
-All legacy backend `read_group()` calls in the rental dashboard were replaced with `_read_group()` and adapted to its tuple-based return values.
-
-The three deprecation warnings seen in the supplied Odoo.sh run are therefore removed from the module source.
-
-### 4. Portal maintenance chatter
-
-Portal rental contract ownership is checked first. After a valid maintenance request is created, the audit/chatter message is posted with narrowly scoped elevated access because portal users intentionally do not have contract write access.
-
-## Security and multi-company behavior
-
-- Core `_check_company()` is restored and no longer shadowed.
-- Commission-to-contract company validation remains active.
-- Maintenance Team selection prefers the request company and only falls back to a shared team.
-- Portal maintenance record creation still runs using the portal user's ACLs and record rules.
-- No portal write access was added to rental contracts.
-- No cross-company dashboard scope was widened.
-
-## Files changed
-
-```text
-__manifest__.py
-models/rent_contract.py
-models/maintenance.py
-models/property_details.py
-controllers/main.py
-tests/common.py
-tests/test_portal.py
-data/maintenance_data.xml
-HOTFIX_REPORT.md
-TEST_REPORT.md
-UPGRADE_REPORT.md
-MIGRATION_NOTES.md
-```
-
-## Data preservation
-
-No existing database column, model technical name, selection key, invoice, property, tenancy, sequence, or existing XML ID is removed or renamed by this revision.
-
-## Validation status
-
-Static package validation is recorded in `TEST_REPORT.md` and `VERIFICATION_v19.0.1.0.9.txt`. Runtime acceptance still requires the next Odoo.sh build.
-
-
-## Hotfix 19.0.1.0.9
-- Fixed Odoo 19 Maintenance Team ACL mismatch in shared test fixtures.
-- Kept Maintenance Team administration restricted to Maintenance/Equipment Manager.
-- Made rental-team resolution deterministic and multi-company safe.
-- Added regression coverage for manager request creation without team-admin rights.
+### Multi-company
+The existing global company rule continues to limit maintenance requests to `allowed_company_ids`.

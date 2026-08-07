@@ -1,0 +1,19 @@
+rental_management 19.0.1.0.10
+
+Static verification completed:
+- 45 Python files compile
+- 57 XML files parse
+- 274 explicit XML IDs checked
+- CSV ACL files valid and duplicate-free
+- Manifest data/assets references valid
+- 1 JavaScript file syntax-valid
+- 37 automated test methods present
+- Explicit maintenance.request ACL: Rental Officer PASS
+- Explicit maintenance.request ACL: Rental Manager PASS
+- Portal maintenance.request ACL remains read/create only PASS
+- No shared fixture creates maintenance.team PASS
+- No deprecated backend .read_group() calls PASS
+- No custom _check_company collision PASS
+- No cache/compiled Python artifacts before packaging PASS
+
+Exact package runtime tests: not run locally (Odoo 19 runtime unavailable).
