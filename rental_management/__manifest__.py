@@ -8,7 +8,7 @@
         'maintenance, recurring invoices, commissions, and customer portal workflows.'
     ),
     'summary': 'Property Sale and Rental Management',
-    'version': '19.0.1.0.8',
+    'version': '19.0.1.0.9',
     'author': 'TechKhedut Inc.',
     'company': 'TechKhedut Inc.',
     'maintainer': 'TechKhedut Inc.',

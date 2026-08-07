@@ -63,6 +63,27 @@ class TestRentalAccessRights(RentalCommon):
         self.assertEqual(contract.contract_type, "cancel_contract")
         self.assertEqual(contract.property_id.stage, "available")
 
+
+    def test_rental_manager_does_not_gain_maintenance_team_admin(self):
+        with self.assertRaises(AccessError):
+            self.env["maintenance.team"].with_user(self.manager).create(
+                {"name": "Forbidden Rental Team", "company_id": self.env.company.id}
+            )
+
+    def test_rental_manager_can_create_maintenance_request_with_default_team(self):
+        property_record = self._create_property("Manager Maintenance Unit")
+        contract = self._create_contract(property_id=property_record, activate=True)
+        request = self.env["maintenance.request"].with_user(self.manager).create(
+            {
+                "name": "Manager Rental Maintenance",
+                "tenancy_id": contract.id,
+                "property_id": property_record.id,
+                "company_id": self.env.company.id,
+            }
+        )
+        self.assertTrue(request.maintenance_team_id)
+        self.assertEqual(request.tenancy_id, contract)
+
     def test_manager_has_officer_privilege(self):
         self.assertTrue(self.manager.has_group("rental_management.property_rental_officer"))
         self.assertTrue(self.manager.has_group("rental_management.property_rental_manager"))

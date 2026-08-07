@@ -34,20 +34,42 @@ class PropertyMaintenance(models.Model):
 
     @api.model
     def _get_rental_maintenance_team(self, company):
-        """Return a company-compatible maintenance team without leaking team data."""
+        """Return a deterministic, company-compatible team for rental requests.
+
+        Odoo 19 intentionally lets normal internal users *read* maintenance teams but
+        reserves team creation to Maintenance/Equipment Managers.  Rental users and
+        portal users therefore reuse existing configuration.  The lookup is sudoed
+        only for the team lookup; the maintenance request itself is still created
+        with the caller's normal ACLs and record rules.
+        """
+        company.ensure_one()
         team_model = self.env["maintenance.team"].sudo().with_company(company)
+
+        # Prefer a team explicitly configured for the request company.
         team = team_model.search(
             [("company_id", "=", company.id), ("active", "=", True)],
             order="id",
             limit=1,
         )
-        if not team:
-            team = team_model.search(
-                [("company_id", "=", False), ("active", "=", True)],
-                order="id",
-                limit=1,
-            )
-        return team
+        if team:
+            return team
+
+        # Fall back deterministically to the module-owned shared team.
+        rental_team = self.env.ref(
+            "rental_management.maintenance_team_rental", raise_if_not_found=False
+        )
+        if rental_team and rental_team.active and (
+            not rental_team.company_id or rental_team.company_id == company
+        ):
+            return rental_team.sudo().with_company(company)
+
+        # Legacy databases may not yet have the new XML ID. Reuse any shared team
+        # rather than creating configuration behind the user's back.
+        return team_model.search(
+            [("company_id", "=", False), ("active", "=", True)],
+            order="id",
+            limit=1,
+        )
 
     @api.model_create_multi
     def create(self, vals_list):

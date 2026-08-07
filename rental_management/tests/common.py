@@ -37,9 +37,12 @@ class RentalCommon(AccountTestInvoicingCommon):
             name="Maintenance", lst_price=75.0, type="service"
         )
         cls.maintenance_product.product_tmpl_id.is_maintenance = True
-        cls.maintenance_team = cls.env["maintenance.team"].create(
-            {"name": "Rental Test Maintenance", "company_id": cls.env.company.id}
-        )
+        # Maintenance teams are configuration records managed by Maintenance/Equipment
+        # Manager in Odoo 19. Rental tests must reuse the module-owned shared team
+        # instead of broadening rental ACLs or creating configuration with a rental user.
+        cls.maintenance_team = cls.env.ref(
+            "rental_management.maintenance_team_rental"
+        ).sudo()
 
         cls.duration_1m = cls.env["contract.duration"].create(
             {"duration": "1 Month", "month": 1, "rent_unit": "Month"}

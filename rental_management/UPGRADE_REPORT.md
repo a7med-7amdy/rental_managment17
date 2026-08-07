@@ -1,10 +1,10 @@
-# rental_management — Upgrade Report 19.0.1.0.8
+# rental_management — Upgrade Report 19.0.1.0.9
 
 ## Version
 
 ```text
 Previous delivered version: 19.0.1.0.7
-Current version: 19.0.1.0.8
+Current version: 19.0.1.0.9
 Technical module name: rental_management
 License: OPL-1
 Author retained: TechKhedut Inc.
@@ -66,4 +66,11 @@ No existing database column, model technical name, selection key, invoice, prope
 
 ## Validation status
 
-Static package validation is recorded in `TEST_REPORT.md` and `VERIFICATION_v19.0.1.0.8.txt`. Runtime acceptance still requires the next Odoo.sh build.
+Static package validation is recorded in `TEST_REPORT.md` and `VERIFICATION_v19.0.1.0.9.txt`. Runtime acceptance still requires the next Odoo.sh build.
+
+
+## Hotfix 19.0.1.0.9
+- Fixed Odoo 19 Maintenance Team ACL mismatch in shared test fixtures.
+- Kept Maintenance Team administration restricted to Maintenance/Equipment Manager.
+- Made rental-team resolution deterministic and multi-company safe.
+- Added regression coverage for manager request creation without team-admin rights.

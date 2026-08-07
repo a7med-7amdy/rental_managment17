@@ -1,8 +1,8 @@
-# Migration Notes — rental_management 19.0.1.0.8
+# Migration Notes — rental_management 19.0.1.0.9
 
 ## Upgrade path
 
-Upgrade from 19.0.1.0.7 to 19.0.1.0.8 using the normal module upgrade process.
+Upgrade from 19.0.1.0.7 to 19.0.1.0.9 using the normal module upgrade process.
 
 ## Database impact
 
@@ -35,15 +35,19 @@ It is a fallback only. When an active company-specific Maintenance Team exists, 
 
 ## Existing migration scripts
 
-The earlier migration scripts under `migrations/19.0.1.0.0/` and `migrations/19.0.1.0.2/` remain unchanged. No `19.0.1.0.8` migration script is required because this hotfix does not rename schema objects or transform existing business data.
+The earlier migration scripts under `migrations/19.0.1.0.0/` and `migrations/19.0.1.0.2/` remain unchanged. No `19.0.1.0.9` migration script is required because this hotfix does not rename schema objects or transform existing business data.
 
 ## Recommended production procedure
 
 1. Take a full database and filestore backup.
-2. Deploy 19.0.1.0.8 to a staging branch/database copied from production.
+2. Deploy 19.0.1.0.9 to a staging branch/database copied from production.
 3. Upgrade `rental_management` with tests enabled.
 4. Confirm the complete rental test suite has zero failures/errors.
 5. Verify an internal user and a portal tenant can create a maintenance request.
 6. Verify tenant/landlord/both broker commission activation creates one rental contract and the expected accounting documents.
 7. Verify dashboard load has no `read_group` deprecation warnings.
 8. Promote the same commit to production only after staging acceptance.
+
+
+## 19.0.1.0.9
+No schema or destructive data migration is required for this hotfix. Existing `maintenance.team` and `maintenance.request` records are preserved. The module-owned shared team XML ID remains stable.
