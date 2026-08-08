@@ -1,40 +1,52 @@
-# HOTFIX REPORT — rental_management 19.0.1.0.14
+# HOTFIX REPORT — rental_management 19.0.1.0.15
 
-## Dashboard restoration
+## Odoo 19 form-layout / Chatter correction
 
-The Odoo 19 upgrade had replaced the original TechKhedut dashboard with a simplified custom dashboard. This revision restores the dashboard shipped in the original `rental_management` 3.1.1 source package.
+### User-visible defect
+
+The Property Project form was compressed into a narrow strip while three large technical one2many tables were rendered across the form. The tables exposed raw mail internals such as related model/id/partner, activities, and messages.
 
 ### Root cause
 
-The upgraded dashboard assets were not a compatibility port of the original source:
+Four form views still used the legacy chatter architecture:
 
-- original `static/src/js/rental.js`: ~627 lines;
-- upgraded simplified `rental.js`: ~88 lines;
-- original `style.scss`: 123 lines;
-- upgraded simplified `style.scss`: 39 lines;
-- original chart libraries had been removed.
+```xml
+<div class="oe_chatter">
+    <field name="message_follower_ids"/>
+    <field name="activity_ids"/>
+    <field name="message_ids"/>
+</div>
+```
 
-This was a redesign, not an Odoo 19 compatibility requirement.
+Under Odoo 19 these fields are rendered as ordinary relational fields instead of the modern Chatter semantic component, which breaks the form layout and exposes technical mail records.
 
 ### Correction
 
-- Restored `static/src/xml/template.xml` exactly from the original 3.1.1 package.
-- Restored `static/src/scss/style.scss` exactly from the original 3.1.1 package.
-- Restored the original locally bundled chart libraries:
-  - `index.js`
-  - `xy.js`
-  - `map.js`
-  - `worldLow.js`
-  - `Animated.js`
-  - `Material.js`
-  - `apexcharts.js`
-- Reimplemented only the dashboard controller `rental.js` for Odoo 19 / OWL:
-  - imports `Component`, lifecycle hooks, `useRef`, and `useState` from `@odoo/owl`;
-  - uses Odoo services through `useService`;
-  - uses Odoo 19 `loadJS` from `@web/core/assets`;
-  - preserves the original client-action tag `property_dashboard`;
-  - restores the original property type chart, broker chart, due/paid chart, property map, cards, and navigation actions;
-  - disposes amCharts roots and ApexCharts instances on navigation/unmount to prevent browser memory leaks;
-  - keeps all dashboard RPC data company-scoped and permission-aware through the already hardened server-side `get_property_stats()` implementation.
+Replaced the legacy block with the Odoo 19 semantic component:
 
-No business model, field, XML ID, state key, invoice, contract, or migration data is removed by this dashboard hotfix.
+```xml
+<chatter/>
+```
+
+Corrected forms:
+
+- `property.project`
+- `property.sub.project`
+- `rent.invoice`
+- `property.vendor`
+
+The existing `property.details` and `tenancy.details` forms were already using the Odoo 19 `<chatter/>` component and were left unchanged.
+
+### Regression protection
+
+Added `tests/test_view_architecture.py`. It verifies at runtime that the four corrected forms:
+
+- contain `<chatter`;
+- contain no legacy `oe_chatter` block;
+- do not expose raw `message_follower_ids` or `message_ids` in the form architecture.
+
+No database schema, technical field, XML ID, contract lifecycle, accounting flow, dashboard visual, or security rule is changed by this UI hotfix.
+
+## Dashboard preservation
+
+All dashboard restoration work from 19.0.1.0.14 is preserved unchanged. The original TechKhedut dashboard XML/SCSS and restored chart libraries remain in the package.

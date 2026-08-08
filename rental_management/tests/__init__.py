@@ -9,3 +9,4 @@ from . import test_portal
 from . import test_broker_commission
 from . import test_upgrade_data
 from . import test_sale_contract
+from . import test_view_architecture

@@ -1,15 +1,15 @@
-# MIGRATION NOTES — rental_management 19.0.1.0.14
+# MIGRATION NOTES — rental_management 19.0.1.0.15
 
-This revision is a frontend/dashboard restoration and does not require a database schema migration.
+No database migration is required for this revision.
 
-Upgrade the module normally so Odoo regenerates `web.assets_backend` and the client action uses the restored dashboard template/controller.
+This revision changes only form-view XML and adds a regression test. Upgrade the module normally so Odoo reloads the corrected `ir.ui.view` architectures.
 
 Recommended Odoo.sh procedure:
 
-1. Deploy the complete 19.0.1.0.14 module directory.
-2. Upgrade `rental_management`.
-3. Allow the build to regenerate assets.
-4. Hard-refresh the browser once after deployment if an old browser asset bundle remains cached.
-5. Open **Properties → Statistics** and verify the restored cards, property-type chart, rent due/paid chart, top-broker chart, and property-location map.
+1. Deploy the complete 19.0.1.0.15 module directory.
+2. Upgrade `rental_management` (do not only restart the service).
+3. After the successful upgrade, reopen a Project record.
+4. Confirm the business form uses the normal full width and the native Chatter appears in its standard Odoo position instead of three technical one2many tables.
+5. Check Subprojects, Rent Invoices, and Property Sale records as the same legacy chatter markup was corrected there too.
 
-No contract/property/accounting data transformation is performed by this revision.
+No property, project, contract, invoice, maintenance, sale, portal, or accounting record is transformed by this revision.

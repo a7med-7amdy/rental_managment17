@@ -1,13 +1,30 @@
-rental_management 19.0.1.0.14 — Dashboard Restoration
-=======================================================
+rental_management 19.0.1.0.15 — Odoo 19 Chatter/Form Layout Hotfix
+====================================================================
 
-Source of visual truth: original rental_management 3.1.1 package
+Root cause fixed: legacy oe_chatter blocks rendered raw mail relational tables on Odoo 19.
 
-Dashboard XML restored from original: YES
-Dashboard SCSS restored from original: YES
-Original local chart libraries restored: YES
-Legacy OWL controller copied unchanged: NO (ported to Odoo 19)
-Client action tag preserved: property_dashboard
-Backend statistics method preserved: property.details.get_property_stats
+Corrected primary forms:
+- property.project
+- property.sub.project
+- rent.invoice
+- property.vendor
 
-Final package verification is recorded again after independent ZIP extraction.
+Already-correct forms preserved:
+- property.details
+- tenancy.details
+
+Odoo 19 <chatter/> components in module views: 6
+Legacy <div class="oe_chatter"> occurrences: 0
+Raw message_follower_ids fields in module views: 0
+Raw message_ids fields in module views: 0
+Regression view-architecture test: INCLUDED
+
+Original dashboard XML preserved from 3.1.1: YES
+Original dashboard SCSS preserved from 3.1.1: YES
+Restored chart libraries preserved: YES
+
+Python syntax/compile: PASS
+XML parse: PASS
+CSV parse: PASS
+Dashboard JavaScript syntax: PASS
+Chart library JavaScript syntax: PASS
