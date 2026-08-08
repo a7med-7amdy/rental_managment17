@@ -5575,3 +5575,47 @@ msgstr "الفواتير المتأخرة"
 msgid "Occupancy Rate"
 msgstr "نسبة الإشغال"
 
+
+#. module: rental_management
+msgid "Project Name"
+msgstr "اسم المشروع"
+
+#. module: rental_management
+msgid "Subproject Name"
+msgstr "اسم المشروع الفرعي"
+
+#. module: rental_management
+msgid "Region Name"
+msgstr "اسم المنطقة"
+
+#. module: rental_management
+msgid "State Name"
+msgstr "اسم المحافظة"
+
+#. module: rental_management
+msgid "Country Name"
+msgstr "اسم الدولة"
+
+#. module: rental_management
+msgid "Property Subtype Name"
+msgstr "اسم النوع الفرعي للعقار"
+
+#. module: rental_management
+msgid "Maintenance Type Name"
+msgstr "اسم نوع الصيانة"
+
+#. module: rental_management
+msgid "Maintenance Stage Name"
+msgstr "اسم مرحلة الصيانة"
+
+#. module: rental_management
+msgid "Service Name"
+msgstr "اسم الخدمة"
+
+#. module: rental_management
+msgid "Tax Names"
+msgstr "أسماء الضرائب"
+
+#. module: rental_management
+msgid "CRM Enquiry"
+msgstr "استعلام CRM"

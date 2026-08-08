@@ -31,10 +31,10 @@ class PropertyMaintenance(models.Model):
         domain="[('is_maintenance', '=', True), '|', ('company_id', '=', False), ('company_id', '=', company_id)]",
     )
     maintenance_type_name = fields.Char(
-        related="maintenance_type_id.name", string="Maintenance Type", store=True, readonly=True
+        related="maintenance_type_id.name", string="Maintenance Type Name", store=True, readonly=True, translate=False
     )
     rental_stage_name = fields.Char(
-        related="stage_id.name", string="Maintenance Stage", store=True, readonly=True
+        related="stage_id.name", string="Maintenance Stage Name", store=True, readonly=True, translate=False
     )
     price = fields.Float(related="maintenance_type_id.list_price", string="Price")
     invoice_id = fields.Many2one("account.move", string="Invoice", copy=False, check_company=True)

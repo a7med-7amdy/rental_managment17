@@ -20,8 +20,7 @@ class TestRentInvoicing(RentalCommon):
         self.assertAlmostEqual(schedule.rent_amount, 1000.0, places=2)
 
     def test_missed_cron_catches_up_once(self):
-        contract = self._create_contract(activate=True)
-        contract.write({"type": "automatic"})
+        contract = self._create_contract(activate=True, type="automatic")
         schedule = contract.rent_invoice_ids.sorted("due_date")[:1]
         schedule.due_date = self.yesterday()
         self.assertEqual(schedule.installment_type, "automatic")

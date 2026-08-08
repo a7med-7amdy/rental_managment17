@@ -62,18 +62,18 @@ class PropertyVendor(models.Model):
                                  string='Country')
     state_id = fields.Many2one(related="property_id.state_id")
     property_subtype_name = fields.Char(
-        related="property_id.property_subtype_id.name", store=True, readonly=True
+        related="property_id.property_subtype_id.name", string="Property Subtype Name", store=True, readonly=True, translate=False
     )
     property_project_name = fields.Char(
-        related="property_id.property_project_id.name", store=True, readonly=True
+        related="property_id.property_project_id.name", string="Project Name", store=True, readonly=True, translate=False
     )
     subproject_name = fields.Char(
-        related="property_id.subproject_id.name", store=True, readonly=True
+        related="property_id.subproject_id.name", string="Subproject Name", store=True, readonly=True, translate=False
     )
-    region_name = fields.Char(related="property_id.region_id.name", store=True, readonly=True)
-    city_name = fields.Char(related="property_id.city_id.name", store=True, readonly=True)
-    state_name = fields.Char(related="property_id.state_id.name", store=True, readonly=True)
-    country_name = fields.Char(related="property_id.country_id.name", store=True, readonly=True)
+    region_name = fields.Char(related="property_id.region_id.name", string="Region Name", store=True, readonly=True, translate=False)
+    city_name = fields.Char(related="property_id.city_id.name", string="City Name", store=True, readonly=True, translate=False)
+    state_name = fields.Char(related="property_id.state_id.name", string="State Name", store=True, readonly=True, translate=False)
+    country_name = fields.Char(related="property_id.country_id.name", string="Country Name", store=True, readonly=True, translate=False)
 
     # Broker Details
     is_any_broker = fields.Boolean(string='Any Broker')
@@ -587,7 +587,7 @@ class SaleInvoice(models.Model):
     )
     tax_amount = fields.Monetary(string="Tax Amount",
                                  compute="compute_tax_amount")
-    tax_names = fields.Char(string="Taxes", compute="_compute_tax_names", store=True, readonly=True)
+    tax_names = fields.Char(string="Tax Names", compute="_compute_tax_names", store=True, readonly=True)
 
     @api.depends("tax_ids.name")
     def _compute_tax_names(self):

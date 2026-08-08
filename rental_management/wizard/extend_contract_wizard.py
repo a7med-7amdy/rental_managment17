@@ -26,8 +26,24 @@ class ExtendContract(models.TransientModel):
     revised_price = fields.Monetary(string="Revised Rent", required=True)
     is_any_broker = fields.Boolean(related="tenancy_id.is_any_broker")
     new_broker_id = fields.Many2one("res.partner", string="Broker", domain="[('user_type', '=', 'broker')]", check_company=True)
-    payment_term = fields.Selection(related="tenancy_id.payment_term", readonly=False, required=True)
-    installment_mode = fields.Selection(related="tenancy_id.type", readonly=False, required=True)
+    payment_term = fields.Selection(
+        [
+            ("monthly", "Monthly"),
+            ("quarterly", "Quarterly"),
+            ("year", "Yearly"),
+            ("full_payment", "Full Payment"),
+        ],
+        string="Payment Term",
+        required=True,
+    )
+    installment_mode = fields.Selection(
+        [
+            ("automatic", "Automatic Installments"),
+            ("manual", "Manual Installments"),
+        ],
+        string="Installment Mode",
+        required=True,
+    )
 
     @api.model
     def default_get(self, field_names):
@@ -56,6 +72,8 @@ class ExtendContract(models.TransientModel):
                 wizard.revised_price = wizard.tenancy_id.total_rent
                 wizard.duration_id = wizard.tenancy_id.duration_id
                 wizard.new_broker_id = wizard.tenancy_id.broker_id
+                wizard.payment_term = wizard.tenancy_id.payment_term
+                wizard.installment_mode = wizard.tenancy_id.type
                 wizard.start_date = wizard.tenancy_id.end_date + relativedelta(days=1)
                 wizard.invoice_start_date = wizard.start_date
 

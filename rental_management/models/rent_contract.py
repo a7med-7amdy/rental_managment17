@@ -114,18 +114,18 @@ class TenancyDetails(models.Model):
     state_id = fields.Many2one(related="property_id.state_id")
     country_id = fields.Many2one(related="property_id.country_id")
     property_subtype_name = fields.Char(
-        related="property_id.property_subtype_id.name", store=True, readonly=True
+        related="property_id.property_subtype_id.name", string="Property Subtype Name", store=True, readonly=True, translate=False
     )
     property_project_name = fields.Char(
-        related="property_id.property_project_id.name", store=True, readonly=True
+        related="property_id.property_project_id.name", string="Project Name", store=True, readonly=True, translate=False
     )
     subproject_name = fields.Char(
-        related="property_id.subproject_id.name", store=True, readonly=True
+        related="property_id.subproject_id.name", string="Subproject Name", store=True, readonly=True, translate=False
     )
-    region_name = fields.Char(related="property_id.region_id.name", store=True, readonly=True)
-    city_name = fields.Char(related="property_id.city_id.name", store=True, readonly=True)
-    state_name = fields.Char(related="property_id.state_id.name", store=True, readonly=True)
-    country_name = fields.Char(related="property_id.country_id.name", store=True, readonly=True)
+    region_name = fields.Char(related="property_id.region_id.name", string="Region Name", store=True, readonly=True, translate=False)
+    city_name = fields.Char(related="property_id.city_id.name", string="City Name", store=True, readonly=True, translate=False)
+    state_name = fields.Char(related="property_id.state_id.name", string="State Name", store=True, readonly=True, translate=False)
+    country_name = fields.Char(related="property_id.country_id.name", string="Country Name", store=True, readonly=True, translate=False)
 
     property_landlord_id = fields.Many2one(
         related="property_id.landlord_id", string="Landlord", store=True, index=True
@@ -171,7 +171,7 @@ class TenancyDetails(models.Model):
         "account.payment.term", string="Accounting Payment Terms", check_company=True
     )
     duration_id = fields.Many2one("contract.duration", string="Duration", tracking=True)
-    duration_name = fields.Char(related="duration_id.duration", string="Duration Label", store=True, readonly=True)
+    duration_name = fields.Char(related="duration_id.duration", string="Duration Label", store=True, readonly=True, translate=False)
     month = fields.Integer(related="duration_id.month", string="Duration Units", store=True)
     total_rent = fields.Monetary(string="Rent", tracking=True)
     rent_unit = fields.Selection(related="property_id.rent_unit", store=True)
@@ -1602,7 +1602,7 @@ class TenancyExtraServiceLine(models.Model):
         domain="[('is_extra_service_product', '=', True)]",
         check_company=True,
     )
-    service_name = fields.Char(related="service_id.name", store=True, readonly=True)
+    service_name = fields.Char(related="service_id.name", string="Service Name", store=True, readonly=True, translate=False)
     price = fields.Float(string="Cost", required=True)
     service_type = fields.Selection(
         [("once", "Once"), ("monthly", "Recurring")], string="Type", default="once", required=True

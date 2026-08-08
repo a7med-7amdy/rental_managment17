@@ -56,6 +56,13 @@ class TestRentalContract(RentalCommon):
         self.assertEqual(contract.contract_type, "running_contract")
         self.assertTrue(move.exists())
 
+
+    def test_financial_terms_are_locked_after_activation(self):
+        contract = self._create_contract(activate=True)
+        with self.assertRaises(UserError):
+            contract.write({"type": "automatic"})
+        self.assertEqual(contract.type, "manual")
+
     def test_direct_running_contract_create_is_rejected(self):
         values = self._contract_values(contract_type="running_contract")
         with self.assertRaises(UserError):

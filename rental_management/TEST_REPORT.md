@@ -1,51 +1,38 @@
-# TEST REPORT — rental_management 19.0.1.0.12
+# Test Report — rental_management 19.0.1.0.13
 
-## Latest real Odoo.sh evidence supplied
-The latest supplied Odoo.sh run for the previous build reached 39 post-install tests and reported:
+## Last real Odoo.sh runtime result
+Version `19.0.1.0.12`:
+- Tests executed: 45
+- Failed assertions: 0
+- Runtime errors: 2
 
-- assertion failures: 0
-- runtime errors: 3
-- all three errors: rental-linked Maintenance Request creation / Maintenance Stage access
+Both runtime errors are addressed in 19.0.1.0.13.
 
-Those errors are the primary runtime target of 19.0.1.0.12 and are addressed by explicit authorization followed by narrowly-scoped privileged creation for rental-linked requests.
+## Regression suite in 19.0.1.0.13
+- Test methods: 46
+- Added/strengthened coverage:
+  - renewal wizard does not mutate active source contract
+  - renewed draft receives its own changed payment/invoice mode
+  - running-contract financial fields remain locked
+  - missed cron starts with automatic mode before activation
 
-## Automated tests included in 19.0.1.0.12
-45 test methods are included across the test suite. Coverage includes:
+## Static/package verification executed for 19.0.1.0.13
+- Python parse/compile: PASS
+- XML parse: PASS
+- Manifest file references: PASS
+- CSV parse: PASS
+- JavaScript syntax: PASS
+- PO parsing: PASS
+- Duplicate XML IDs: 0
+- Stored translated related-field warning patterns: 0
+- Duplicate explicit field-label warning patterns: 0
+- Legacy `<tree>`: 0
+- Legacy `attrs=`: 0
+- Legacy `states=`: 0
+- Deprecated `.read_group()`: 0
+- Eager Date/Datetime defaults: 0
+- Migration signatures: PASS
+- Custom models with ACL coverage: 52 / 52
 
-- property rental lifecycle;
-- required activation fields;
-- overlap prevention;
-- monthly, quarterly, yearly and full-payment invoicing;
-- missed cron catch-up and idempotency;
-- contract month-end anchoring;
-- duration-unit vs pricing-unit separation;
-- manual service schedule recovery;
-- renewal links and next-day dates;
-- close / cancel protections;
-- broker commissions from tenant, landlord and both;
-- Rental Officer / Rental Manager / internal / public permissions;
-- maintenance creation including default Team/Stage and caller `create_uid`;
-- multi-company visibility and dashboard isolation;
-- portal ownership and maintenance ownership;
-- upgrade-data preservation;
-- property sale booking / refund lifecycle and direct-state protection.
-
-## Static checks executed in this environment
-- Python compilation / AST parsing
-- XML parsing
-- manifest file-reference validation
-- CSV / ACL validation
-- duplicate XML ID check
-- custom-model ACL coverage check
-- custom compute/inverse/search method existence check
-- custom Cron / action target checks
-- local `env.ref()` check
-- JavaScript syntax (`node --check`)
-- migration signature check
-- original-vs-upgraded custom model/field/selection comparison
-- deprecated-pattern scan
-- compiled/cache-file cleanup check
-- ZIP CRC and independent extraction validation
-
-## Runtime limitation
-This environment does not contain a complete Odoo 19 Enterprise server and PostgreSQL database, therefore 19.0.1.0.12 itself has not been executed locally with `odoo-bin`. The next Odoo.sh build is the authoritative runtime verification. No report claims runtime success that was not actually observed.
+## Runtime status
+The 19.0.1.0.13 package itself could not be executed with `odoo-bin` in this workspace because an Odoo 19 Enterprise + PostgreSQL runtime is not installed here. Therefore this report does not claim 46/46 runtime success before the package is run on Odoo.sh.

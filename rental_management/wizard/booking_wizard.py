@@ -52,7 +52,7 @@ class BookingWizard(models.TransientModel):
     from_inquiry = fields.Boolean("From Enquiry")
     note = fields.Text(string="Note", translate=True)
     lead_id = fields.Many2one(
-        "crm.lead", string="Enquiry", check_company=True, domain="[('property_id','=',property_id)]"
+        "crm.lead", string="CRM Enquiry", check_company=True, domain="[('property_id','=',property_id)]"
     )
 
     is_any_maintenance = fields.Boolean(related="property_id.is_maintenance_service")
@@ -79,7 +79,7 @@ class BookingWizard(models.TransientModel):
     )
 
     # Legacy compatibility field retained for existing XML/data references.
-    inquiry_id = fields.Many2one("sale.inquiry", string="Enquiry", check_company=True)
+    inquiry_id = fields.Many2one("sale.inquiry", string="Sale Enquiry", check_company=True)
 
     @api.model
     def default_get(self, field_list):

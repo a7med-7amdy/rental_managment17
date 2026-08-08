@@ -16,16 +16,24 @@ class TestContractRenewal(RentalCommon):
                 "start_date": old.end_date + timedelta(days=1),
                 "invoice_start_date": old.end_date + timedelta(days=1),
                 "revised_price": 1100.0,
-                "payment_term": "monthly",
-                "installment_mode": "manual",
+                "payment_term": "quarterly",
+                "installment_mode": "automatic",
                 "new_broker_id": False,
             }
         )
+        # Wizard fields are independent values. Creating/editing a renewal must
+        # never inverse-write financial settings onto the active source contract.
+        self.assertEqual(old.payment_term, "monthly")
+        self.assertEqual(old.type, "manual")
         action = wizard.extend_contract_action()
         renewed = self.env["tenancy.details"].browse(action["res_id"])
         self.assertEqual(renewed.start_date, old.end_date + timedelta(days=1))
         self.assertEqual(renewed.previous_contract_id, old)
         self.assertEqual(old.new_contract_id, renewed)
         self.assertEqual(renewed.contract_type, "new_contract")
+        self.assertEqual(renewed.payment_term, "quarterly")
+        self.assertEqual(renewed.type, "automatic")
         self.assertEqual(old.contract_type, "running_contract")
+        self.assertEqual(old.payment_term, "monthly")
+        self.assertEqual(old.type, "manual")
         renewed._check_no_overlap()
