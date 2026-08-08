@@ -1,42 +1,40 @@
-# Rental Management Odoo 19 — Hotfix Report
+# HOTFIX REPORT — rental_management 19.0.1.0.14
 
-## Release
-- Module: `rental_management`
-- Version: `19.0.1.0.13`
-- Date: 2026-08-08
+## Dashboard restoration
 
-## Runtime baseline
-The previous `19.0.1.0.12` Odoo.sh run executed all 45 module tests and ended with 0 assertion failures and 2 runtime errors:
-1. Renewal wizard creation inverse-wrote `payment_term` / installment mode onto an already active source contract.
-2. The missed-cron test changed installment mode after activation, correctly triggering the production contract lock.
+The Odoo 19 upgrade had replaced the original TechKhedut dashboard with a simplified custom dashboard. This revision restores the dashboard shipped in the original `rental_management` 3.1.1 source package.
 
-## Root-cause fixes
-### Renewal wizard
-`payment_term` and `installment_mode` were writable related fields. On a TransientModel, assigning them caused Odoo's related-field inverse to write to the active `tenancy.details` record during wizard creation.
+### Root cause
 
-They are now independent Selection fields on the wizard. `default_get()` and the tenancy onchange populate them from the source contract. The new contract receives the selected values, while the source contract is never modified.
+The upgraded dashboard assets were not a compatibility port of the original source:
 
-No generic context bypass was added to `tenancy.details.write()`; the post-activation financial lock remains enforced.
+- original `static/src/js/rental.js`: ~627 lines;
+- upgraded simplified `rental.js`: ~88 lines;
+- original `style.scss`: 123 lines;
+- upgraded simplified `style.scss`: 39 lines;
+- original chart libraries had been removed.
 
-### Missed cron test
-The test now creates the contract with `type='automatic'` before activation. It no longer mutates protected financial configuration on a running contract.
+This was a redesign, not an Odoo 19 compatibility requirement.
 
-### Warning cleanup
-All module-origin warnings shown in the last Odoo.sh log were addressed:
-- Stored related translated Char fields now explicitly use `translate=False` while retaining their stored schema and technical field names.
-- Duplicate UI labels were disambiguated without changing technical field names:
-  - Project Name / Subproject Name
-  - Region Name
-  - Maintenance Type Name / Maintenance Stage Name
-  - Tax Names
-  - CRM Enquiry / Sale Enquiry
-- Arabic translations were added for the new labels.
+### Correction
 
-## Regression coverage
-- Renewal test now proves wizard values do not mutate the active source contract.
-- Renewal can select a different payment term/installment mode for the new draft.
-- A new test proves protected financial terms still cannot be edited after activation.
-- Total automated test methods included: 46.
+- Restored `static/src/xml/template.xml` exactly from the original 3.1.1 package.
+- Restored `static/src/scss/style.scss` exactly from the original 3.1.1 package.
+- Restored the original locally bundled chart libraries:
+  - `index.js`
+  - `xy.js`
+  - `map.js`
+  - `worldLow.js`
+  - `Animated.js`
+  - `Material.js`
+  - `apexcharts.js`
+- Reimplemented only the dashboard controller `rental.js` for Odoo 19 / OWL:
+  - imports `Component`, lifecycle hooks, `useRef`, and `useState` from `@odoo/owl`;
+  - uses Odoo services through `useService`;
+  - uses Odoo 19 `loadJS` from `@web/core/assets`;
+  - preserves the original client-action tag `property_dashboard`;
+  - restores the original property type chart, broker chart, due/paid chart, property map, cards, and navigation actions;
+  - disposes amCharts roots and ApexCharts instances on navigation/unmount to prevent browser memory leaks;
+  - keeps all dashboard RPC data company-scoped and permission-aware through the already hardened server-side `get_property_stats()` implementation.
 
-## External warning
-The recurring `res.partner.email_normalized` reStructuredText warning is produced by Odoo's official `mail` module manifest, not by `rental_management`. No Odoo Core file is modified by this release.
+No business model, field, XML ID, state key, invoice, contract, or migration data is removed by this dashboard hotfix.

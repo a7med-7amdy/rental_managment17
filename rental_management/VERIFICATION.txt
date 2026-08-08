@@ -1,23 +1,13 @@
-rental_management 19.0.1.0.13
-Static verification completed: 2026-08-08
+rental_management 19.0.1.0.14 — Dashboard Restoration
+=======================================================
 
-Python files: 49
-XML files: 58
-Explicit XML IDs: 293
-Custom models: 52
-Custom models with ACL coverage: 52/52
-Automated test methods: 46
+Source of visual truth: original rental_management 3.1.1 package
 
-Python parse/compile: PASS
-XML parsing: PASS
-Manifest references: PASS
-CSV parsing: PASS
-JavaScript syntax: PASS
-PO parsing: PASS
-Duplicate XML IDs: 0
-Static warning patterns from rental_management: 0
+Dashboard XML restored from original: YES
+Dashboard SCSS restored from original: YES
+Original local chart libraries restored: YES
+Legacy OWL controller copied unchanged: NO (ported to Odoo 19)
+Client action tag preserved: property_dashboard
+Backend statistics method preserved: property.details.get_property_stats
 
-Runtime status:
-Previous v19.0.1.0.12 Odoo.sh run: 45 tests, 0 failed assertions, 2 runtime errors.
-Both errors are fixed in v19.0.1.0.13.
-v19.0.1.0.13 runtime execution still requires Odoo.sh / Odoo 19 Enterprise.
+Final package verification is recorded again after independent ZIP extraction.

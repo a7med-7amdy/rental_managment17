@@ -1,17 +1,15 @@
-# Migration Notes — 19.0.1.0.13
+# MIGRATION NOTES — rental_management 19.0.1.0.14
 
-## Upgrade path
-Upgrade normally from the previous `rental_management` build with `-u rental_management` or the Odoo.sh module upgrade flow.
+This revision is a frontend/dashboard restoration and does not require a database schema migration.
 
-## Data safety
-This release does not rename/drop persistent models, fields, XML IDs, contract states, invoice links, sequences, or accounting records.
+Upgrade the module normally so Odoo regenerates `web.assets_backend` and the client action uses the restored dashboard template/controller.
 
-The renewal wizard changes affect only the transient wizard model. Existing rental contracts are not rewritten.
+Recommended Odoo.sh procedure:
 
-Stored related display fields keep the same technical names and remain stored; only translation metadata/UI labels were corrected.
+1. Deploy the complete 19.0.1.0.14 module directory.
+2. Upgrade `rental_management`.
+3. Allow the build to regenerate assets.
+4. Hard-refresh the browser once after deployment if an old browser asset bundle remains cached.
+5. Open **Properties → Statistics** and verify the restored cards, property-type chart, rent due/paid chart, top-broker chart, and property-location map.
 
-## Before production upgrade
-1. Take a database and filestore backup.
-2. Run the upgrade on staging.
-3. Run the full module test suite.
-4. Verify one renewal, one automatic missed-invoice catch-up, one portal maintenance request, and one multi-company switch.
+No contract/property/accounting data transformation is performed by this revision.
