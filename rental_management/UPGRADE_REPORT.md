@@ -1,37 +1,38 @@
-# UPGRADE REPORT — rental_management 19.0.1.0.10
+# UPGRADE REPORT — rental_management 19.0.1.0.12
 
-This revision continues the Odoo 19 Enterprise migration and addresses the latest Odoo.sh runtime security failure.
+## Version
+- Technical module: `rental_management`
+- Target: Odoo 19 Enterprise
+- Final audited version: `19.0.1.0.12`
+- License and original author metadata preserved.
 
-## Changed files
-- `__manifest__.py` — version bumped to 19.0.1.0.10
-- `security/ir.model.access.csv` — explicit Rental Officer/Manager access to `maintenance.request`
-- `tests/test_security.py` — added officer maintenance-request regression test
-- Reports updated for this hotfix
+## Main upgrade areas
+- Odoo 19 manifest, products, views, actions, assets and cron compatibility
+- Rental/property lifecycle state machine
+- Contract overlap and activation/renewal/close/cancel rules
+- Unified idempotent rent invoicing and catch-up cron processing
+- Broker commission accounting
+- Property sale booking/installments/refund lifecycle
+- Multi-company enforcement
+- Rental Officer / Rental Manager security
+- Portal ownership and maintenance creation security
+- Dashboard grouped/batched queries
+- XLSX reports
+- migration/data-preservation scripts
+- automated test suite
 
-## Security behavior
-### Rental Officer
-- Maintenance Request: read/create/write allowed
-- Maintenance Request: delete denied
-- Maintenance Team administration: denied
+## Full-audit additions in 19.0.1.0.12
+- redesigned rental-linked Maintenance creation around explicit authorization + scoped privileged Core creation;
+- fixed missing Maintenance Stage access for Portal and rental-only users without granting configuration access;
+- separated duration unit from rent pricing unit;
+- fixed dormant scheduled-action method references for measurement/address synchronization;
+- hardened property and sale state changes against direct RPC manipulation;
+- restored For Sale flow and corrected booking arithmetic;
+- batched project/subproject statistics and property state validation;
+- corrected tax/fiscal-position handling in broker accounting;
+- made manual additional-charge schedules recoverable without misclassifying them as rent;
+- corrected migration function signatures for Odoo 19;
+- compared custom schema and selection keys against the original uploaded module to protect upgrade data.
 
-### Rental Manager
-- Includes Rental Officer privileges
-- Maintenance Request: read/create/write allowed
-- Maintenance Request: delete denied
-- Maintenance Team administration: denied
-
-### Portal
-- Maintenance Request: read/create only
-- Ownership rule restricts records to the signed-in tenant's contracts
-
-### Multi-company
-The existing global company rule continues to limit maintenance requests to `allowed_company_ids`.
-
-## 19.0.1.0.11 maintenance ACL hardening
-
-- Added dedicated `security/maintenance_access.xml` with fresh updateable ACL XML IDs for the inherited `maintenance.request` core model.
-- Added post-migration ACL verification for existing databases.
-- Added rental-specific create authorization for internal and portal users.
-- Prevented non-rental internal users from linking Maintenance Requests to rental contracts.
-- Portal requests require ownership and an active rental contract.
-- Kept Maintenance Team administration separate from Rental Manager privileges.
+## Runtime status
+The previous Odoo.sh build loaded the module and executed the post-install suite, reaching 39 tests with 0 assertion failures and 3 Maintenance-related runtime errors. Those three root causes are addressed here. This exact 19.0.1.0.12 build has not been executed locally because an Odoo 19 Enterprise/PostgreSQL runtime is unavailable in this workspace.

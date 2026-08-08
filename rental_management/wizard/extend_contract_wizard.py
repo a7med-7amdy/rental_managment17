@@ -25,7 +25,7 @@ class ExtendContract(models.TransientModel):
     currency_id = fields.Many2one(related="company_id.currency_id")
     revised_price = fields.Monetary(string="Revised Rent", required=True)
     is_any_broker = fields.Boolean(related="tenancy_id.is_any_broker")
-    new_broker_id = fields.Many2one("res.partner", string="Broker", domain="[('user_type', '=', 'broker')]")
+    new_broker_id = fields.Many2one("res.partner", string="Broker", domain="[('user_type', '=', 'broker')]", check_company=True)
     payment_term = fields.Selection(related="tenancy_id.payment_term", readonly=False, required=True)
     installment_mode = fields.Selection(related="tenancy_id.type", readonly=False, required=True)
 
@@ -74,6 +74,19 @@ class ExtendContract(models.TransientModel):
         old = self.tenancy_id
         if old.contract_type not in ("running_contract", "expire_contract", "close_contract"):
             raise UserError(_("Only running, expired, or closed contracts can be renewed."))
+        self.env.cr.execute(
+            "SELECT id FROM tenancy_details WHERE id = %s FOR UPDATE",
+            (old.id,),
+        )
+        old.invalidate_recordset(["new_contract_id", "renewal_ids"])
+        existing_renewal = old.renewal_ids.filtered(
+            lambda contract: contract.contract_type != "cancel_contract"
+        )[:1]
+        if existing_renewal:
+            raise UserError(
+                _("A renewal already exists for this contract: %s") % existing_renewal.display_name
+            )
+        old._lock_property_for_activation()
 
         service_commands = [
             Command.create(

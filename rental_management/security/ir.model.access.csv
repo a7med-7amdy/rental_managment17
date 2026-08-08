@@ -108,3 +108,5 @@ rental_management.access_property_documents_portal,property.documents portal own
 rental_management.access_tenancy_details_portal,tenancy.details portal own,rental_management.model_tenancy_details,base.group_portal,1,0,0,0
 rental_management.access_rent_invoice_portal,rent.invoice portal own,rental_management.model_rent_invoice,base.group_portal,1,0,0,0
 rental_management.access_property_vendor_portal,property.vendor portal own,rental_management.model_property_vendor,base.group_portal,1,0,0,0
+rental_management.access_sale_invoice_portal,sale.invoice portal own,rental_management.model_sale_invoice,base.group_portal,1,0,0,0
+rental_management.access_tenancy_service_line_portal,tenancy.service.line portal own,rental_management.model_tenancy_service_line,base.group_portal,1,0,0,0

@@ -1,4 +1,6 @@
-from datetime import date
+from datetime import date, timedelta
+
+from dateutil.relativedelta import relativedelta
 
 from odoo.fields import Command
 from odoo.tests import tagged
@@ -91,3 +93,74 @@ class TestRentInvoicing(RentalCommon):
         manual = self._create_contract(property_id=other_property, duration_id=self.duration_4m.id)
         manual.action_activate_contract()
         self.assertEqual(len(manual.rent_invoice_ids), 4)
+
+    def test_duration_unit_is_independent_from_rate_unit(self):
+        property_record = self._create_property("Annual Price One Month")
+        property_record.rent_unit = "Year"
+        one_month = self._create_contract(
+            property_id=property_record,
+            duration_id=self.duration_1m.id,
+            payment_term="monthly",
+            total_rent=12000.0,
+        )
+        one_month.action_activate_contract()
+        self.assertEqual(one_month.end_date, one_month.start_date + relativedelta(months=1) - timedelta(days=1))
+        self.assertAlmostEqual(one_month.rent_invoice_ids.rent_amount, 1000.0, places=2)
+
+        monthly_property = self._create_property("Monthly Price One Year")
+        yearly = self._create_contract(
+            property_id=monthly_property,
+            duration_id=self.duration_1y.id,
+            payment_term="year",
+            total_rent=1000.0,
+        )
+        yearly.action_activate_contract()
+        self.assertEqual(len(yearly.rent_invoice_ids), 1)
+        self.assertAlmostEqual(yearly.rent_invoice_ids.rent_amount, 12000.0, places=2)
+
+    def test_daily_rate_full_payment_uses_contract_days(self):
+        property_record = self._create_property("Daily Rate Unit")
+        property_record.rent_unit = "Day"
+        contract = self._create_contract(
+            property_id=property_record,
+            duration_id=self.duration_3d.id,
+            payment_term="full_payment",
+            total_rent=100.0,
+        )
+        contract.action_activate_contract()
+        self.assertEqual((contract.end_date - contract.start_date).days + 1, 3)
+        self.assertAlmostEqual(contract.rent_invoice_ids.rent_amount, 300.0, places=2)
+
+    def test_manual_service_schedule_recovers_service_only(self):
+        contract = self._create_contract(activate=True)
+        service = self.env["tenancy.service.line"].create(
+            {
+                "tenancy_id": contract.id,
+                "service_id": self.service_product.id,
+                "price": 125.0,
+                "service_type": "once",
+            }
+        )
+        today = date.today()
+        schedule = self.env["rent.invoice"].create(
+            {
+                "tenancy_id": contract.id,
+                "company_id": contract.company_id.id,
+                "type": "other",
+                "invoice_type": "service",
+                "period_start": today,
+                "period_end": today,
+                "due_date": today,
+                "invoice_date": today,
+                "description": "Recovered service",
+                "amount": 125.0,
+                "charge_amount": 125.0,
+                "charge_product_id": self.service_product.id,
+                "service_line_id": service.id,
+            }
+        )
+        move = schedule._create_account_move()
+        self.assertEqual(len(move.invoice_line_ids), 1)
+        self.assertEqual(move.invoice_line_ids.product_id, self.service_product)
+        self.assertAlmostEqual(move.invoice_line_ids.price_unit, 125.0, places=2)
+        self.assertAlmostEqual(schedule.rent_amount, 0.0, places=2)

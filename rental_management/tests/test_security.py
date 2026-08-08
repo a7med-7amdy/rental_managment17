@@ -82,7 +82,9 @@ class TestRentalAccessRights(RentalCommon):
             }
         )
         self.assertTrue(request.maintenance_team_id)
+        self.assertTrue(request.stage_id)
         self.assertEqual(request.tenancy_id, contract)
+        self.assertEqual(request.sudo().create_uid, self.officer)
 
     def test_rental_manager_can_create_maintenance_request_with_default_team(self):
         property_record = self._create_property("Manager Maintenance Unit")
@@ -96,7 +98,9 @@ class TestRentalAccessRights(RentalCommon):
             }
         )
         self.assertTrue(request.maintenance_team_id)
+        self.assertTrue(request.stage_id)
         self.assertEqual(request.tenancy_id, contract)
+        self.assertEqual(request.sudo().create_uid, self.manager)
 
 
     def test_maintenance_model_create_acl_is_effective_for_rental_roles(self):

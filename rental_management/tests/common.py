@@ -59,6 +59,9 @@ class RentalCommon(AccountTestInvoicingCommon):
         cls.duration_1y = cls.env["contract.duration"].create(
             {"duration": "1 Year", "month": 1, "rent_unit": "Year"}
         )
+        cls.duration_3d = cls.env["contract.duration"].create(
+            {"duration": "3 Days", "month": 3, "rent_unit": "Day"}
+        )
         cls.property = cls._create_property("Rental Unit A")
 
     @classmethod

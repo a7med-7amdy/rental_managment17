@@ -1,31 +1,51 @@
-# TEST REPORT — rental_management 19.0.1.0.11
+# TEST REPORT — rental_management 19.0.1.0.12
 
-## Latest target-runtime evidence
+## Latest real Odoo.sh evidence supplied
+The latest supplied Odoo.sh run for the previous build reached 39 post-install tests and reported:
 
-The latest Odoo.sh run supplied for version 19.0.1.0.10 reached 33 post-install tests with:
+- assertion failures: 0
+- runtime errors: 3
+- all three errors: rental-linked Maintenance Request creation / Maintenance Stage access
 
-- Failed assertions: 0
-- Runtime errors: 3
-- Root cause of all 3 errors: missing effective `create` access on `maintenance.request`.
+Those errors are the primary runtime target of 19.0.1.0.12 and are addressed by explicit authorization followed by narrowly-scoped privileged creation for rental-linked requests.
 
-Those three runtime errors are addressed in 19.0.1.0.11 through explicit XML ACL records plus an upgrade migration and rental-specific server-side authorization.
+## Automated tests included in 19.0.1.0.12
+45 test methods are included across the test suite. Coverage includes:
 
-## Static/package validation executed for 19.0.1.0.11
+- property rental lifecycle;
+- required activation fields;
+- overlap prevention;
+- monthly, quarterly, yearly and full-payment invoicing;
+- missed cron catch-up and idempotency;
+- contract month-end anchoring;
+- duration-unit vs pricing-unit separation;
+- manual service schedule recovery;
+- renewal links and next-day dates;
+- close / cancel protections;
+- broker commissions from tenant, landlord and both;
+- Rental Officer / Rental Manager / internal / public permissions;
+- maintenance creation including default Team/Stage and caller `create_uid`;
+- multi-company visibility and dashboard isolation;
+- portal ownership and maintenance ownership;
+- upgrade-data preservation;
+- property sale booking / refund lifecycle and direct-state protection.
 
-- Python AST/compile: passed
-- XML parsing: passed
-- Manifest file references: passed
-- Asset references: passed
-- ACL CSV parsing: passed
-- Dedicated maintenance ACL XML validation: passed
-- JavaScript syntax check: passed when Node is available
-- Translation PO validation: passed when msgfmt is available
-- Duplicate explicit XML ID scan: passed
-- Legacy `tree`, `attrs`, `states` pattern scan: passed
-- Deprecated backend `.read_group()` scan: passed
-- Custom `_check_company` collision scan: passed
-- Automated test methods included: 39
+## Static checks executed in this environment
+- Python compilation / AST parsing
+- XML parsing
+- manifest file-reference validation
+- CSV / ACL validation
+- duplicate XML ID check
+- custom-model ACL coverage check
+- custom compute/inverse/search method existence check
+- custom Cron / action target checks
+- local `env.ref()` check
+- JavaScript syntax (`node --check`)
+- migration signature check
+- original-vs-upgraded custom model/field/selection comparison
+- deprecated-pattern scan
+- compiled/cache-file cleanup check
+- ZIP CRC and independent extraction validation
 
-## Runtime status
-
-This environment does not contain a complete Odoo 19 Enterprise + PostgreSQL runtime, so 19.0.1.0.11 has not been executed here with `odoo-bin`. The next Odoo.sh build remains the authoritative runtime verification.
+## Runtime limitation
+This environment does not contain a complete Odoo 19 Enterprise server and PostgreSQL database, therefore 19.0.1.0.12 itself has not been executed locally with `odoo-bin`. The next Odoo.sh build is the authoritative runtime verification. No report claims runtime success that was not actually observed.

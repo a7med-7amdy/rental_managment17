@@ -65,7 +65,7 @@
 							Property
 						</th>
 						<th>
-							Property Management
+							Company
 						</th>
 						<th class="text-center">
 							Status
@@ -84,7 +84,7 @@
 								<span t-field="b.property_id.name"/>
 							</td>
 							<td>
-								<span t-field="b.landlord_id.name"/>
+								<span t-field="b.company_id.name"/>
 							</td>
 							<td class="text-center">
 								<t t-if="b.stage in ['booked']">
@@ -181,7 +181,7 @@
 										:
 									</div>
 									<div class="col-md-7 col-7 col-sm-6">
-										<span t-field="sell_contract.type" class="fw-bold"/> / <span t-field="sell_contract.property_subtype_id" class="fw-bold"/>
+										<span t-field="sell_contract.type" class="fw-bold"/> / <span t-field="sell_contract.property_subtype_name" class="fw-bold"/>
 									</div>
 									<div class="col-md-4 col-4 col-sm-6">
 										Address
@@ -194,10 +194,10 @@
 										<br/>
 										<span t-esc="sell_contract.street2" class="fw-bold"/>
 										<br/>
-										<span t-esc="sell_contract.city_id.name" class="fw-bold"/>
+										<span t-esc="sell_contract.city_name" class="fw-bold"/>
 										<span t-esc="sell_contract.zip" class="fw-bold"/>
 										<br/>
-										<span t-esc="sell_contract.state_id.name" class="fw-bold"/> , <span t-esc="sell_contract.country_id.name" class="fw-bold"/>
+										<span t-esc="sell_contract.state_name" class="fw-bold"/> , <span t-esc="sell_contract.country_name" class="fw-bold"/>
 									</div>
 								</div>
 							</div>
@@ -221,9 +221,9 @@
 										:
 									</div>
 									<div class="col-md-7 col-7 col-sm-6">
-										<span t-field="sell_contract.region_id.name" class="fw-bold"/>
+										<span t-field="sell_contract.region_name" class="fw-bold"/>
 									</div>
-									<t t-if="sell_contract.property_project_id">
+									<t t-if="sell_contract.property_project_name">
 										<div class="col-md-4 col-4 col-sm-6">
 											Project
 										</div>
@@ -231,10 +231,10 @@
 											:
 										</div>
 										<div class="col-md-7 col-7 col-sm-6">
-											<span t-field="sell_contract.property_project_id.name" class="fw-bold"/>
+											<span t-field="sell_contract.property_project_name" class="fw-bold"/>
 										</div>
 									</t>
-									<t t-if="sell_contract.subproject_id">
+									<t t-if="sell_contract.subproject_name">
 										<div class="col-md-4 col-4 col-sm-6">
 											Sub Project
 										</div>
@@ -242,7 +242,7 @@
 											:
 										</div>
 										<div class="col-md-7 col-7 col-sm-6">
-											<span t-field="sell_contract.subproject_id.name" class="fw-bold"/>
+											<span t-field="sell_contract.subproject_name" class="fw-bold"/>
 										</div>
 									</t>
 								</div>
@@ -285,12 +285,12 @@
 						</div>
 						<div class="h6 ps-1 pb-2 pt-2 text-primary border-bottom border-top border-primary">
 							<i class="fa fa-user-o" aria-hidden="true">
-							</i> Property Management Contact </div>
+							</i> Company Contact </div>
 						<div class="row p-2">
 							<div class="col-md-5 col-sm-12">
 								<div class="row">
 									<div class="col-4 col-md-4 col-sm-6">
-										Property Management
+										Company
 									</div>
 									<div class="col-md-1 remove_colon">
 										:
@@ -471,7 +471,7 @@
 													<span t-field="ins.invoice_date"/>
 												</td>
 												<td>
-													<span t-field="ins.tax_ids"/>
+													<span t-field="ins.tax_names"/>
 												</td>
 												<td class="text-end">
 													<span t-field="ins.amount"/>
@@ -599,7 +599,7 @@
 							Property
 						</th>
 						<th>
-							Property Management
+							Company
 						</th>
 						<th>
 							Duration
@@ -628,7 +628,7 @@
 									<i class="fa fa-fw fa-clock-o" aria-label="Duration" title="Duration" role="img">
 									</i>
 									<span class="d-none d-md-inline">
-										<span t-field="rc.duration_id.duration"/>
+										<span t-field="rc.duration_name"/>
 									</span>
 								</span>
 							</td>
@@ -782,7 +782,7 @@
 										:
 									</div>
 									<div class="col-7 col-md-7 col-sm-6">
-										<span t-field="rent.duration_id.duration" class="fw-bold"/>
+										<span t-field="rent.duration_name" class="fw-bold"/>
 									</div>
 									<div class="col-4 col-md-4 col-sm-6">
 										Payment Term
@@ -917,7 +917,7 @@
 										:
 									</div>
 									<div class="col-7 col-md-7 col-sm-6">
-										<span t-field="rent.property_type" class="fw-bold"/> / <span t-field="rent.property_subtype_id" class="fw-bold"/>
+										<span t-field="rent.property_type" class="fw-bold"/> / <span t-field="rent.property_subtype_name" class="fw-bold"/>
 									</div>
 									<div class="col-4 col-md-4 col-sm-6">
 										Address
@@ -930,10 +930,10 @@
 										<br/>
 										<span t-esc="rent.street2" class="fw-bold"/>
 										<br/>
-										<span t-esc="rent.city_id.name" class="fw-bold"/>
+										<span t-esc="rent.city_name" class="fw-bold"/>
 										<span t-esc="rent.zip" class="fw-bold"/>
 										<br/>
-										<span t-esc="rent.state_id.name" class="fw-bold"/> , <span t-esc="rent.country_id.name" class="fw-bold"/>
+										<span t-esc="rent.state_name" class="fw-bold"/> , <span t-esc="rent.country_name" class="fw-bold"/>
 									</div>
 								</div>
 							</div>
@@ -948,9 +948,9 @@
 										:
 									</div>
 									<div class="col-7 col-md-7 col-sm-6">
-										<span t-field="rent.region_id.name" class="fw-bold"/>
+										<span t-field="rent.region_name" class="fw-bold"/>
 									</div>
-									<t t-if="rent.property_project_id">
+									<t t-if="rent.property_project_name">
 										<div class="col-4 col-md-4 col-sm-6">
 											Project
 										</div>
@@ -958,10 +958,10 @@
 											:
 										</div>
 										<div class="col-7 col-md-7 col-sm-6">
-											<span t-field="rent.property_project_id.name" class="fw-bold"/>
+											<span t-field="rent.property_project_name" class="fw-bold"/>
 										</div>
 									</t>
-									<t t-if="rent.subproject_id">
+									<t t-if="rent.subproject_name">
 										<div class="col-4 col-md-4 col-sm-6">
 											Sub Project
 										</div>
@@ -969,7 +969,7 @@
 											:
 										</div>
 										<div class="col-7 col-md-7 col-sm-6">
-											<span t-field="rent.subproject_id.name" class="fw-bold"/>
+											<span t-field="rent.subproject_name" class="fw-bold"/>
 										</div>
 									</t>
 								</div>
@@ -977,12 +977,12 @@
 						</div>
 						<div class="h6 ps-1 pb-2 pt-2 text-primary border-bottom border-top border-primary">
 							<i class="fa fa-user-o" aria-hidden="true">
-							</i> Property Management Contact </div>
+							</i> Company Contact </div>
 						<div class="row p-2">
 							<div class="col-md-5 col-sm-12">
 								<div class="row">
 									<div class="col-4 col-md-4 col-sm-6">
-										Property Management
+										Company
 									</div>
 									<div class="col-md-1 remove_colon">
 										:
@@ -1101,7 +1101,7 @@
 										<t t-foreach="rent.extra_services_ids" t-as="s">
 											<tr>
 												<td>
-													<span t-field="s.service_id.name"/>
+													<span t-field="s.service_name"/>
 												</td>
 												<td>
 													<span t-field="s.service_type"/>
@@ -1293,7 +1293,7 @@
 							Property
 						</th>
 						<th>
-							Property Management
+							Company
 						</th>
 						<th>
 							Type
@@ -1318,10 +1318,10 @@
 								<span t-field="mr.company_id.name"/>
 							</td>
 							<td>
-								<span t-field="mr.maintenance_type_id.name"/>
+								<span t-field="mr.maintenance_type_name"/>
 							</td>
 							<td class="text-center">
-								<span t-field="mr.stage_id.name"/>
+								<span t-field="mr.rental_stage_name"/>
 							</td>
 						</tr>
 					</t>
@@ -1337,12 +1337,12 @@
 					<div class="card-header row">
 						<div class="col-6">
 							<strong>
-								<span t-field="mr.maintenance_type_id.name"/>
+								<span t-field="mr.maintenance_type_name"/>
 							</strong>
 						</div>
 						<div class="col-6 text-end">
 							<span class="badge rounded-pill text-bg-info">
-								<span t-field="mr.stage_id.name"/>
+								<span t-field="mr.rental_stage_name"/>
 							</span>
 						</div>
 					</div>

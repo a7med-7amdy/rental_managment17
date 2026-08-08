@@ -55,3 +55,8 @@ class TestRentalContract(RentalCommon):
             contract.action_cancel_contract(reason="Cancellation requested")
         self.assertEqual(contract.contract_type, "running_contract")
         self.assertTrue(move.exists())
+
+    def test_direct_running_contract_create_is_rejected(self):
+        values = self._contract_values(contract_type="running_contract")
+        with self.assertRaises(UserError):
+            self.env["tenancy.details"].create(values)

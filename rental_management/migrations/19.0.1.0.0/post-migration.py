@@ -20,7 +20,7 @@ def migrate(cr, version):
         [("contract_type", "=", "running_contract"), ("end_date", "<", today)]
     )
     if expired:
-        expired.write({"contract_type": "expire_contract"})
+        expired.with_context(allow_contract_state_write=True).write({"contract_type": "expire_contract"})
         _logger.info("rental_management: marked %s past contracts as expired", len(expired))
 
     all_running = Contract.search(

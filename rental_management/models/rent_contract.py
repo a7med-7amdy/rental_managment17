@@ -76,7 +76,7 @@ class TenancyDetails(models.Model):
     activation_email_sent = fields.Boolean(copy=False)
     expiry_reminder_sent = fields.Boolean(copy=False)
     expiry_email_sent = fields.Boolean(copy=False)
-    last_reminder_schedule_id = fields.Many2one("rent.invoice", copy=False)
+    last_reminder_schedule_id = fields.Many2one("rent.invoice", copy=False, check_company=True)
 
     company_id = fields.Many2one(
         "res.company",
@@ -93,7 +93,7 @@ class TenancyDetails(models.Model):
     property_id = fields.Many2one(
         "property.details",
         string="Property",
-        domain="[('stage', '=', 'available'), ('company_id', 'in', allowed_company_ids)]",
+        domain="[('sale_lease', '=', 'for_tenancy'), ('stage', '=', 'available'), ('company_id', 'in', allowed_company_ids)]",
         index=True,
         check_company=True,
         tracking=True,
@@ -113,6 +113,19 @@ class TenancyDetails(models.Model):
     zip = fields.Char(related="property_id.zip")
     state_id = fields.Many2one(related="property_id.state_id")
     country_id = fields.Many2one(related="property_id.country_id")
+    property_subtype_name = fields.Char(
+        related="property_id.property_subtype_id.name", store=True, readonly=True
+    )
+    property_project_name = fields.Char(
+        related="property_id.property_project_id.name", store=True, readonly=True
+    )
+    subproject_name = fields.Char(
+        related="property_id.subproject_id.name", store=True, readonly=True
+    )
+    region_name = fields.Char(related="property_id.region_id.name", store=True, readonly=True)
+    city_name = fields.Char(related="property_id.city_id.name", store=True, readonly=True)
+    state_name = fields.Char(related="property_id.state_id.name", store=True, readonly=True)
+    country_name = fields.Char(related="property_id.country_id.name", store=True, readonly=True)
 
     property_landlord_id = fields.Many2one(
         related="property_id.landlord_id", string="Landlord", store=True, index=True
@@ -158,6 +171,7 @@ class TenancyDetails(models.Model):
         "account.payment.term", string="Accounting Payment Terms", check_company=True
     )
     duration_id = fields.Many2one("contract.duration", string="Duration", tracking=True)
+    duration_name = fields.Char(related="duration_id.duration", string="Duration Label", store=True, readonly=True)
     month = fields.Integer(related="duration_id.month", string="Duration Units", store=True)
     total_rent = fields.Monetary(string="Rent", tracking=True)
     rent_unit = fields.Selection(related="property_id.rent_unit", store=True)
@@ -206,7 +220,8 @@ class TenancyDetails(models.Model):
     broker_invoice_state = fields.Boolean(string="Broker Invoice State", compute="_compute_broker_state")
     broker_invoice_id = fields.Many2one("account.move", string="Broker Bill", copy=False, check_company=True)
     broker_id = fields.Many2one(
-        "res.partner", string="Broker", domain="[('user_type', '=', 'broker')]", tracking=True
+        "res.partner", string="Broker", domain="[('user_type', '=', 'broker')]",
+        tracking=True, check_company=True,
     )
     commission = fields.Monetary(string="Calculated Broker Commission", compute="_compute_broker_commission", store=True)
     rent_type = fields.Selection(
@@ -289,23 +304,48 @@ class TenancyDetails(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            requested_state = vals.get("contract_type", "new_contract")
+            if requested_state != "new_contract" and not self.env.context.get("allow_contract_state_write"):
+                raise UserError(
+                    _("New rental contracts must be created in Draft and activated through the rental workflow.")
+                )
             if vals.get("tenancy_seq", "New") == "New":
                 vals["tenancy_seq"] = self.env["ir.sequence"].next_by_code("tenancy.details") or "New"
             vals.setdefault("contract_type", "new_contract")
         records = super().create(vals_list)
         records._check_company_consistency()
         for contract in records.filtered(lambda record: record.contract_type == "running_contract"):
+            contract._check_required_for_activation()
             contract._check_no_overlap()
         return records
 
     def write(self, vals):
-        protected = {"property_id", "tenancy_id", "company_id", "start_date", "duration_id"}
+        if "contract_type" in vals and not self.env.context.get("allow_contract_state_write"):
+            changing = self.filtered(lambda rec: rec.contract_type != vals["contract_type"])
+            if changing:
+                raise UserError(
+                    _("Contract status can only be changed through the rental workflow actions.")
+                )
+        protected = {
+            "property_id", "tenancy_id", "company_id", "start_date", "duration_id",
+            "invoice_start_date", "payment_term", "type", "total_rent",
+            "installment_item_id", "invoice_payment_term_id",
+            "is_any_deposit", "deposit_amount", "deposit_item_id",
+            "instalment_tax", "deposit_tax", "service_tax", "tax_ids",
+            "is_any_broker", "broker_id", "broker_item_id", "commission_from",
+            "commission_type", "broker_commission", "broker_commission_percentage",
+            "rent_type",
+        }
         if protected.intersection(vals) and any(
             record.contract_type in ("running_contract", "expire_contract", "close_contract")
             for record in self
         ):
             if not self.env.context.get("allow_contract_structural_write"):
-                raise UserError(_("Core contract parties, property, company and dates cannot be changed after activation."))
+                raise UserError(
+                    _("Contract parties, dates, rent, invoicing, tax, deposit and commission settings "
+                      "cannot be changed after activation. Renew the contract or return it to a controlled "
+                      "draft workflow before changing financial terms.")
+                )
         result = super().write(vals)
         if {"property_id", "tenancy_id", "company_id", "start_date", "duration_id", "invoice_start_date"}.intersection(vals):
             self._check_company_consistency()
@@ -329,15 +369,16 @@ class TenancyDetails(models.Model):
                 "expire_contract",
             )
 
-    @api.depends("start_date", "month", "rent_unit")
+    @api.depends("start_date", "duration_id.month", "duration_id.rent_unit")
     def _compute_end_date(self):
         for contract in self:
             contract.end_date = False
             if not contract.start_date or not contract.month or contract.month <= 0:
                 continue
-            if contract.rent_unit == "Day":
+            duration_unit = contract.duration_id.rent_unit or "Month"
+            if duration_unit == "Day":
                 contract.end_date = contract.start_date + relativedelta(days=contract.month - 1)
-            elif contract.rent_unit == "Year":
+            elif duration_unit == "Year":
                 contract.end_date = contract.start_date + relativedelta(years=contract.month) - timedelta(days=1)
             else:
                 contract.end_date = contract.start_date + relativedelta(months=contract.month) - timedelta(days=1)
@@ -345,6 +386,10 @@ class TenancyDetails(models.Model):
     @api.depends(
         "is_any_broker",
         "month",
+        "duration_id.rent_unit",
+        "start_date",
+        "end_date",
+        "rent_unit",
         "broker_commission",
         "broker_commission_percentage",
         "commission_type",
@@ -417,22 +462,37 @@ class TenancyDetails(models.Model):
             else []
         )
         move_map = {contract.id: count for contract, count in move_groups}
-        maintenance_groups = self.env["maintenance.request"]._read_group(
-            [("tenancy_id", "in", self.ids)], ["tenancy_id"], ["__count"]
-        ) if self.ids else []
+        maintenance_model = self.env["maintenance.request"]
+        maintenance_groups = (
+            maintenance_model._read_group(
+                [("tenancy_id", "in", self.ids)], ["tenancy_id"], ["__count"]
+            )
+            if self.ids and maintenance_model.browse().has_access("read")
+            else []
+        )
         maintenance_map = {contract.id: count for contract, count in maintenance_groups}
-        commission_groups = self.env["rental.commission"]._read_group(
-            [("contract_id", "in", self.ids)], ["contract_id"], ["__count"]
-        ) if self.ids else []
+        commission_model = self.env["rental.commission"]
+        commission_groups = (
+            commission_model._read_group(
+                [("contract_id", "in", self.ids)], ["contract_id"], ["__count"]
+            )
+            if self.ids and commission_model.browse().has_access("read")
+            else []
+        )
         commission_map = {contract.id: count for contract, count in commission_groups}
         renewal_groups = self.env["tenancy.details"]._read_group(
             [("previous_contract_id", "in", self.ids)], ["previous_contract_id"], ["__count"]
         ) if self.ids else []
         renewal_map = {contract.id: count for contract, count in renewal_groups}
         property_ids = self.mapped("property_id").ids
-        document_groups = self.env["property.documents"]._read_group(
-            [("property_id", "in", property_ids)], ["property_id"], ["__count"]
-        ) if property_ids else []
+        document_model = self.env["property.documents"]
+        document_groups = (
+            document_model._read_group(
+                [("property_id", "in", property_ids)], ["property_id"], ["__count"]
+            )
+            if property_ids and document_model.browse().has_access("read")
+            else []
+        )
         document_map = {property_record.id: count for property_record, count in document_groups}
         for contract in self:
             contract.invoice_count = invoice_map.get(contract.id, 0)
@@ -485,6 +545,8 @@ class TenancyDetails(models.Model):
 
     def _check_required_for_activation(self):
         self.ensure_one()
+        if self.property_id and self.property_id.sale_lease != "for_tenancy":
+            raise UserError(_("The selected property is not configured for rent."))
         required = {
             _("Property"): self.property_id,
             _("Tenant"): self.tenancy_id,
@@ -526,6 +588,16 @@ class TenancyDetails(models.Model):
             limit=1,
         )
 
+    def _lock_property_for_activation(self):
+        """Serialize activations for one property to prevent concurrent overlaps."""
+        self.ensure_one()
+        if not self.property_id:
+            return
+        self.env.cr.execute(
+            "SELECT id FROM property_details WHERE id = %s FOR UPDATE",
+            (self.property_id.id,),
+        )
+
     def _check_no_overlap(self):
         self.ensure_one()
         conflict = self._get_overlap_contract()
@@ -555,9 +627,13 @@ class TenancyDetails(models.Model):
             if contract.contract_type != "new_contract":
                 raise UserError(_("Only draft contracts can be activated."))
             contract._check_required_for_activation()
-            contract._check_no_overlap()
             with self.env.cr.savepoint():
-                contract.with_context(allow_contract_structural_write=True).write(
+                contract._lock_property_for_activation()
+                contract._check_no_overlap()
+                contract.with_context(
+                    allow_contract_structural_write=True,
+                    allow_contract_state_write=True,
+                ).write(
                     {
                         "contract_type": "running_contract",
                         "activation_date": fields.Datetime.now(),
@@ -568,15 +644,25 @@ class TenancyDetails(models.Model):
                 property_stage = contract.property_id.stage
                 contract.tenancy_id.is_tenancy = True
                 schedules = contract._ensure_installment_schedule()
-                contract._ensure_commission_records()
+                contract._ensure_commission_records(create_documents=True)
                 if contract.type == "automatic":
                     due = schedules.filtered(
                         lambda line: not line.rent_invoice_id
                         and line.due_date
                         and line.due_date <= fields.Date.context_today(contract)
                     )
-                    for line in due:
-                        line._create_account_move()
+                    if due and self.env["account.move"].browse().has_access("create"):
+                        for line in due:
+                            line._create_account_move()
+                    elif due:
+                        contract.message_post(
+                            body=_(
+                                "The contract was activated and its installment schedule was created, "
+                                "but accounting invoices are pending because the current user does not "
+                                "have Billing invoice creation access."
+                            ),
+                            subtype_xmlid="mail.mt_note",
+                        )
                 contract._send_activation_email_once()
                 contract._schedule_expiry_activity()
                 contract.message_post(
@@ -606,7 +692,7 @@ class TenancyDetails(models.Model):
                         "The accounting documents were preserved for collection or adjustment."
                     ) % {"count": len(posted_open)}
                 )
-            contract.write(
+            contract.with_context(allow_contract_state_write=True).write(
                 {
                     "contract_type": "close_contract",
                     "close_date": fields.Datetime.now(),
@@ -645,7 +731,7 @@ class TenancyDetails(models.Model):
             cancellation_reason = reason or self.env.context.get("cancel_reason")
             if not cancellation_reason:
                 return contract.action_open_cancel_wizard()
-            contract.write(
+            contract.with_context(allow_contract_state_write=True).write(
                 {
                     "contract_type": "cancel_contract",
                     "cancel_date": fields.Datetime.now(),
@@ -749,8 +835,14 @@ class TenancyDetails(models.Model):
             return 0
 
     def _get_contract_charge_units(self):
+        """Return the contract length expressed in the property's pricing unit."""
         self.ensure_one()
-        return max(self.month, 1)
+        if not self.start_date or not self.end_date:
+            return 0.0
+        if self.rent_unit == "Day":
+            return (self.end_date - self.start_date).days + 1
+        month_units = self._count_month_equivalents(self.start_date, self.end_date)
+        return month_units / 12.0 if self.rent_unit == "Year" else month_units
 
     def _get_period_delta(self):
         self.ensure_one()
@@ -804,6 +896,14 @@ class TenancyDetails(models.Model):
 
     def _ensure_installment_schedule(self):
         self.ensure_one()
+        # Serialize schedule generation per contract. Without this lock two workers
+        # (or a double click plus the cron) can both observe an empty schedule and
+        # race to create the same periods.
+        self.env.cr.execute(
+            "SELECT id FROM tenancy_details WHERE id = %s FOR UPDATE",
+            (self.id,),
+        )
+        self.invalidate_recordset(["rent_invoice_ids"])
         commands = []
         existing_keys = {
             (line.period_start, line.period_end, line.invoice_type)
@@ -850,15 +950,23 @@ class TenancyDetails(models.Model):
         }
 
     def _compute_period_rent_amount(self, period_start, period_end):
+        """Return rent for a period using the property's rent-rate unit.
+
+        ``payment_term`` controls *when* invoices are emitted; ``rent_unit``
+        controls what ``total_rent`` means. Keeping those concepts separate is
+        essential: a monthly-priced property invoiced yearly must charge twelve
+        monthly units, while an annual-priced property invoiced monthly must
+        charge one twelfth of the annual rate.
+        """
         self.ensure_one()
-        if self.payment_term == "full_payment":
-            return self.total_rent * self._get_contract_charge_units()
+        if not period_start or not period_end or period_end < period_start:
+            return 0.0
+        if self.rent_unit == "Day":
+            return self.total_rent * ((period_end - period_start).days + 1)
         month_quantity = self._count_month_equivalents(period_start, period_end)
-        if self.payment_term in ("monthly", "quarterly"):
-            return self.total_rent * month_quantity
-        if self.payment_term == "year":
+        if self.rent_unit == "Year":
             return self.total_rent * month_quantity / 12.0
-        return self.total_rent
+        return self.total_rent * month_quantity
 
     def _count_month_equivalents(self, period_start, period_end):
         """Return contract-anchored month units with final-period proration."""
@@ -893,14 +1001,17 @@ class TenancyDetails(models.Model):
         return total
 
     def _get_contract_months(self):
+        """Return an upper-bound month count from the duration, not the rate unit."""
         self.ensure_one()
-        if self.rent_unit == "Year":
+        duration_unit = self.duration_id.rent_unit or "Month"
+        if duration_unit == "Year":
             return max(self.month, 0) * 12
-        if self.rent_unit == "Month":
+        if duration_unit == "Month":
             return max(self.month, 0)
         if self.start_date and self.end_date:
-            return max((self.end_date - self.start_date).days // 28 + 1, 1)
-        return max(self.month, 0)
+            days = (self.end_date - self.start_date).days + 1
+            return max((days + 27) // 28, 1)
+        return 1
 
     def _prepare_period_invoice_lines(self, schedule):
         self.ensure_one()
@@ -976,6 +1087,13 @@ class TenancyDetails(models.Model):
                 )
         return lines, breakdown
 
+    def _map_customer_taxes(self, taxes):
+        """Return company-safe customer taxes after fiscal-position mapping."""
+        self.ensure_one()
+        taxes = taxes.filtered(lambda tax: tax.company_id == self.company_id)
+        fiscal_position = self.tenancy_id.with_company(self.company_id).property_account_position_id
+        return fiscal_position.map_tax(taxes) if fiscal_position and taxes else taxes
+
     def _prepare_invoice_line_vals(self, product, name, quantity, price_unit, apply_tax=False):
         self.ensure_one()
         if not product:
@@ -987,7 +1105,7 @@ class TenancyDetails(models.Model):
             "price_unit": price_unit,
         }
         if apply_tax:
-            vals["tax_ids"] = [Command.set(self.tax_ids.ids)]
+            vals["tax_ids"] = [Command.set(self._map_customer_taxes(self.tax_ids).ids)]
         return vals
 
     def _prepare_rent_invoice_vals(self, schedule, invoice_lines):
@@ -995,7 +1113,7 @@ class TenancyDetails(models.Model):
         vals = {
             "partner_id": self.tenancy_id.id,
             "move_type": "out_invoice",
-            "invoice_date": schedule.due_date or fields.Date.context_today(self),
+            "invoice_date": schedule.invoice_date or schedule.due_date or fields.Date.context_today(self),
             "company_id": self.company_id.id,
             "currency_id": self.currency_id.id,
             "invoice_origin": self.tenancy_seq,
@@ -1025,6 +1143,8 @@ class TenancyDetails(models.Model):
                 "invoice_type": "rent",
                 "invoice_date": invoice_id.invoice_date,
                 "due_date": invoice_id.invoice_date,
+                "period_start": invoice_id.invoice_date,
+                "period_end": invoice_id.invoice_date,
                 "description": _("Rental invoice"),
                 "rent_invoice_id": invoice_id.id,
                 "amount": amount,
@@ -1032,20 +1152,30 @@ class TenancyDetails(models.Model):
         )
 
     def action_utility_service_invoice(self):
-        """Legacy helper returning first-period service line commands."""
+        """Legacy helper returning first-period service line commands safely."""
         self.ensure_one()
+        if not self.start_date or not self.end_date:
+            raise UserError(_("Set the contract start and end dates before preparing service invoice lines."))
+        period_delta = self._get_period_delta() or relativedelta(months=1)
+        period_end = min(self.end_date, self.start_date + period_delta - timedelta(days=1))
         dummy = self.env["rent.invoice"].new(
-            {"period_start": self.start_date, "period_end": min(self.end_date, self.start_date + (self._get_period_delta() or relativedelta(months=1)) - timedelta(days=1))}
+            {"period_start": self.start_date, "period_end": period_end}
         )
         lines, _breakdown = self._prepare_period_invoice_lines(dummy)
         return lines[1:]  # rent line is first
 
-    def _ensure_commission_records(self):
+    def _ensure_commission_records(self, create_documents=True, require_account_access=False):
+        """Create one commission record per source and optionally its accounting documents."""
         self.ensure_one()
         if not self.is_any_broker or not self.commission:
             return self.env["rental.commission"]
         sources = ["customer", "landlord"] if self.commission_from == "both" else [self.commission_from]
         records = self.env["rental.commission"]
+        can_create_moves = self.env["account.move"].browse().has_access("create")
+        if create_documents and require_account_access and not can_create_moves:
+            raise AccessError(
+                _("Billing invoice creation access is required to create broker accounting documents.")
+            )
         for source in filter(None, sources):
             record = self.env["rental.commission"].search(
                 [("contract_id", "=", self.id), ("source", "=", source)], limit=1
@@ -1061,16 +1191,27 @@ class TenancyDetails(models.Model):
                         "currency_id": self.currency_id.id,
                     }
                 )
-            record.action_create_accounting_documents()
-            if record.broker_bill_id and not self.broker_invoice_id:
-                self.broker_invoice_id = record.broker_bill_id
+            if create_documents and can_create_moves:
+                record.action_create_accounting_documents()
+                if record.broker_bill_id and not self.broker_invoice_id:
+                    self.broker_invoice_id = record.broker_bill_id
             records |= record
+        if create_documents and records and not can_create_moves:
+            self.message_post(
+                body=_(
+                    "Broker commission records were created, but their accounting documents are "
+                    "pending because the current user does not have Billing invoice creation access."
+                ),
+                subtype_xmlid="mail.mt_note",
+            )
         return records
 
     def action_broker_invoice(self):
         for contract in self:
             contract._check_required_for_activation()
-            contract._ensure_commission_records()
+            contract._ensure_commission_records(
+                create_documents=True, require_account_access=True
+            )
         return True
 
     def action_invoices(self):
@@ -1215,41 +1356,65 @@ class TenancyDetails(models.Model):
 
     @api.model
     def _cron_process_rental_lifecycle(self, batch_size=200):
+        """Process every running contract in stable batches without starving later records."""
         today = fields.Date.context_today(self)
-        running = self.search(
-            [("contract_type", "=", "running_contract")], order="end_date, id", limit=batch_size
-        )
         reminder_days = self._get_reminder_days()
         reminder_limit = today + relativedelta(days=reminder_days)
-        for contract in running:
-            try:
-                with self.env.cr.savepoint():
-                    contract._ensure_installment_schedule()
-                    if (
-                        reminder_days > 0
-                        and contract.end_date
-                        and today <= contract.end_date <= reminder_limit
-                        and not contract.expiry_reminder_sent
-                    ):
-                        contract.action_send_tenancy_reminder()
-                        contract.expiry_reminder_sent = True
-                        contract._schedule_expiry_activity()
-                        contract.message_post(
-                            body=_("Contract expiry reminder sent. End date: %s.") % contract.end_date
-                        )
-                    if contract.end_date and contract.end_date < today:
-                        contract.write({"contract_type": "expire_contract"})
-                        contract._release_property_if_possible()
-                        contract._schedule_expiry_activity()
-                        if not contract.expiry_email_sent:
+        last_id = 0
+        processed = 0
+        while True:
+            batch = self.search(
+                [
+                    ("contract_type", "=", "running_contract"),
+                    ("id", ">", last_id),
+                ],
+                order="id",
+                limit=batch_size,
+            )
+            if not batch:
+                break
+            last_id = batch[-1].id
+            affected_properties = self.env["property.details"]
+            for contract in batch:
+                affected_properties |= contract.property_id
+                try:
+                    with self.env.cr.savepoint():
+                        contract._ensure_installment_schedule()
+                        if (
+                            reminder_days > 0
+                            and contract.end_date
+                            and today <= contract.end_date <= reminder_limit
+                            and not contract.expiry_reminder_sent
+                        ):
                             contract.action_send_tenancy_reminder()
-                            contract.expiry_email_sent = True
-                        contract.message_post(body=_("Contract expired automatically on %s.") % contract.end_date)
-            except Exception:
-                _logger.exception("Rental lifecycle processing failed for contract %s", contract.display_name)
-        running._sync_property_stage()
+                            contract.expiry_reminder_sent = True
+                            contract._schedule_expiry_activity()
+                            contract.message_post(
+                                body=_("Contract expiry reminder sent. End date: %s.")
+                                % contract.end_date
+                            )
+                        if contract.end_date and contract.end_date < today:
+                            contract.with_context(allow_contract_state_write=True).write({"contract_type": "expire_contract"})
+                            contract._schedule_expiry_activity()
+                            if not contract.expiry_email_sent:
+                                contract.action_send_tenancy_reminder()
+                                contract.expiry_email_sent = True
+                            contract.message_post(
+                                body=_("Contract expired automatically on %s.")
+                                % contract.end_date
+                            )
+                except Exception:
+                    _logger.exception(
+                        "Rental lifecycle processing failed for contract %s",
+                        contract.display_name,
+                    )
+            if affected_properties:
+                # Recompute from all running contracts, including future renewals.
+                self.search([("property_id", "in", affected_properties.ids)])._sync_property_stage()
+            processed += len(batch)
+
         self.env["rent.invoice"]._cron_create_due_invoices(batch_size=batch_size)
-        return len(running)
+        return processed
 
     @api.model
     def tenancy_recurring_invoice(self):
@@ -1285,7 +1450,7 @@ class RentalCommission(models.Model):
     source = fields.Selection(
         [("customer", "Tenant"), ("landlord", "Landlord")], required=True, index=True
     )
-    broker_id = fields.Many2one("res.partner", required=True, index=True)
+    broker_id = fields.Many2one("res.partner", required=True, index=True, check_company=True)
     amount = fields.Monetary(required=True)
     company_id = fields.Many2one("res.company", required=True, index=True)
     currency_id = fields.Many2one("res.currency", required=True)
@@ -1297,22 +1462,34 @@ class RentalCommission(models.Model):
         required=True,
         tracking=True,
     )
-
-    _commission_source_unique = models.Constraint(
-        "UNIQUE(contract_id, source)", "Only one commission record per source is allowed."
-    )
-    _commission_amount_positive = models.Constraint(
-        "CHECK(amount >= 0)", "Commission cannot be negative."
+    legacy_duplicate = fields.Boolean(
+        string="Legacy Duplicate", copy=False, index=True,
+        help="Preserves duplicate commission rows found during upgrade without allowing new duplicates.",
     )
 
-    @api.constrains("contract_id", "company_id")
+    _commission_source_unique = models.UniqueIndex(
+        "(contract_id, source) WHERE legacy_duplicate IS FALSE",
+        "Only one active commission record per source is allowed.",
+    )
+
+    @api.constrains("contract_id", "company_id", "amount")
     def _check_commission_company(self):
         for commission in self:
             if commission.company_id != commission.contract_id.company_id:
                 raise ValidationError(_("Commission and contract must belong to the same company."))
+            if commission.amount < 0:
+                raise ValidationError(_("Commission cannot be negative."))
 
     def action_create_accounting_documents(self):
+        move_model = self.env["account.move"]
+        if not move_model.browse().has_access("create"):
+            raise AccessError(_("Billing invoice creation access is required to create broker accounting documents."))
         for commission in self:
+            self.env.cr.execute(
+                "SELECT id FROM rental_commission WHERE id = %s FOR UPDATE",
+                (commission.id,),
+            )
+            commission.invalidate_recordset(["broker_bill_id", "charge_invoice_id", "state"])
             if commission.state == "invoiced" and commission.broker_bill_id and commission.charge_invoice_id:
                 continue
             contract = commission.contract_id
@@ -1323,41 +1500,67 @@ class RentalCommission(models.Model):
             if not source_partner:
                 raise UserError(_("The selected commission source has no partner configured."))
             line_name = _("Broker commission for %s") % contract.property_id.display_name
-            line_vals = {
+            broker_fp = commission.broker_id.with_company(commission.company_id).property_account_position_id
+            supplier_taxes = product.supplier_taxes_id.filtered(
+                lambda tax: tax.company_id == commission.company_id
+            )
+            if broker_fp and supplier_taxes:
+                supplier_taxes = broker_fp.map_tax(supplier_taxes)
+            bill_line_vals = {
                 "product_id": product.id,
                 "name": line_name,
                 "quantity": 1.0,
                 "price_unit": commission.amount,
             }
+            if supplier_taxes:
+                bill_line_vals["tax_ids"] = [Command.set(supplier_taxes.ids)]
+
+            source_fp = source_partner.with_company(commission.company_id).property_account_position_id
+            customer_taxes = product.taxes_id.filtered(
+                lambda tax: tax.company_id == commission.company_id
+            )
+            if source_fp and customer_taxes:
+                customer_taxes = source_fp.map_tax(customer_taxes)
+            charge_line_vals = {
+                "product_id": product.id,
+                "name": line_name,
+                "quantity": 1.0,
+                "price_unit": commission.amount,
+            }
+            if customer_taxes:
+                charge_line_vals["tax_ids"] = [Command.set(customer_taxes.ids)]
+
             if not commission.broker_bill_id:
-                bill = self.env["account.move"].with_company(commission.company_id).create(
-                    {
-                        "partner_id": commission.broker_id.id,
-                        "move_type": "in_invoice",
-                        "invoice_date": contract.invoice_start_date,
-                        "company_id": commission.company_id.id,
-                        "currency_id": commission.currency_id.id,
-                        "invoice_origin": contract.tenancy_seq,
-                        "tenancy_id": contract.id,
-                        "invoice_line_ids": [Command.create(line_vals)],
-                    }
-                )
+                bill_vals = {
+                    "partner_id": commission.broker_id.id,
+                    "move_type": "in_invoice",
+                    "invoice_date": contract.invoice_start_date,
+                    "company_id": commission.company_id.id,
+                    "currency_id": commission.currency_id.id,
+                    "invoice_origin": contract.tenancy_seq,
+                    "tenancy_id": contract.id,
+                    "invoice_line_ids": [Command.create(bill_line_vals)],
+                }
+                if broker_fp:
+                    bill_vals["fiscal_position_id"] = broker_fp.id
+                bill = self.env["account.move"].with_company(commission.company_id).create(bill_vals)
                 if contract._get_invoice_post_type() == "automatically":
                     bill.action_post()
                 commission.broker_bill_id = bill
             if not commission.charge_invoice_id:
-                charge = self.env["account.move"].with_company(commission.company_id).create(
-                    {
-                        "partner_id": source_partner.id,
-                        "move_type": "out_invoice",
-                        "invoice_date": contract.invoice_start_date,
-                        "company_id": commission.company_id.id,
-                        "currency_id": commission.currency_id.id,
-                        "invoice_origin": contract.tenancy_seq,
-                        "tenancy_id": contract.id,
-                        "invoice_line_ids": [Command.create(line_vals)],
-                    }
-                )
+                charge_vals = {
+                    "partner_id": source_partner.id,
+                    "move_type": "out_invoice",
+                    "invoice_date": contract.invoice_start_date,
+                    "company_id": commission.company_id.id,
+                    "currency_id": commission.currency_id.id,
+                    "invoice_origin": contract.tenancy_seq,
+                    "tenancy_id": contract.id,
+                    "invoice_line_ids": [Command.create(charge_line_vals)],
+                }
+                if source_fp:
+                    charge_vals["fiscal_position_id"] = source_fp.id
+                charge = self.env["account.move"].with_company(commission.company_id).create(charge_vals)
                 if contract._get_invoice_post_type() == "automatically":
                     charge.action_post()
                 commission.charge_invoice_id = charge
@@ -1399,6 +1602,7 @@ class TenancyExtraServiceLine(models.Model):
         domain="[('is_extra_service_product', '=', True)]",
         check_company=True,
     )
+    service_name = fields.Char(related="service_id.name", store=True, readonly=True)
     price = fields.Float(string="Cost", required=True)
     service_type = fields.Selection(
         [("once", "Once"), ("monthly", "Recurring")], string="Type", default="once", required=True
@@ -1426,11 +1630,23 @@ class TenancyExtraServiceLine(models.Model):
             contract = service.tenancy_id
             if contract.contract_type != "running_contract":
                 raise UserError(_("Extra service invoices can only be created for a running contract."))
+            move_model = self.env["account.move"].with_company(contract.company_id)
+            if not move_model.browse().has_access("create"):
+                raise AccessError(
+                    _("Billing invoice creation access is required to invoice an extra service.")
+                )
+            # Serialize manual invoicing of one service line so concurrent requests
+            # cannot create two logical schedules before the unique index is seen.
+            self.env.cr.execute(
+                "SELECT id FROM tenancy_service_line WHERE id = %s FOR UPDATE",
+                (service.id,),
+            )
             today = fields.Date.context_today(service)
             existing = self.env["rent.invoice"].search(
                 [
                     ("tenancy_id", "=", contract.id),
                     ("invoice_type", "=", "service"),
+                    ("service_line_id", "=", service.id),
                     ("period_start", "=", today),
                     ("period_end", "=", today),
                 ],
@@ -1450,29 +1666,15 @@ class TenancyExtraServiceLine(models.Model):
                     "invoice_date": today,
                     "description": _("Additional service: %s") % service.service_id.display_name,
                     "amount": service.price,
+                    "charge_amount": service.price,
+                    "charge_product_id": service.service_id.id,
+                    "charge_tax_ids": [
+                        Command.set(contract.tax_ids.ids if contract.service_tax else [])
+                    ],
+                    "service_line_id": service.id,
                 }
             )
-            line = Command.create(
-                contract._prepare_invoice_line_vals(
-                    product=service.service_id,
-                    name=schedule.description,
-                    quantity=1.0,
-                    price_unit=service.price,
-                    apply_tax=contract.service_tax,
-                )
-            )
-            move = self.env["account.move"].with_company(contract.company_id).create(
-                contract._prepare_rent_invoice_vals(schedule, [line])
-            )
-            if contract._get_invoice_post_type() == "automatically":
-                move.action_post()
-            schedule.write(
-                {
-                    "rent_invoice_id": move.id,
-                    "amount": move.amount_total,
-                    "service_amount": move.amount_total,
-                }
-            )
+            move = schedule._create_account_move()
             service.from_contract = True
         return True
 

@@ -29,7 +29,7 @@ class PropertyDetails(models.Model):
                             required=True,
                             default="residential")
     sale_lease = fields.Selection([
-        # ('for_sale', 'Sale'),
+        ('for_sale', 'Sale'),
         ('for_tenancy', 'Rent')],
         string='Property For',
         default='for_tenancy',
@@ -94,10 +94,10 @@ class PropertyDetails(models.Model):
     latitude = fields.Char(string='Latitude')
 
     # Owner Details
-    landlord_id = fields.Many2one('res.partner',
-                                  string='LandLord',
-                                  index=True,
-                                  domain=[('user_type', '=', 'landlord')])
+    landlord_id = fields.Many2one(
+        'res.partner', string='LandLord', index=True, check_company=True,
+        domain=[('user_type', '=', 'landlord')],
+    )
     landlord_phone = fields.Char(string="Phone", related="landlord_id.phone")
     landlord_email = fields.Char(string="Email", related="landlord_id.email")
     website = fields.Char(string='Website', translate=True)
@@ -214,8 +214,9 @@ class PropertyDetails(models.Model):
     property_vendor_ids = fields.One2many('property.vendor',
                                           'property_id',
                                           string='Booking Details')
-    sold_booking_id = fields.Many2one('property.vendor',
-                                      string="Booking")
+    sold_booking_id = fields.Many2one(
+        'property.vendor', string="Booking", check_company=True, ondelete="restrict"
+    )
     sale_broker_count = fields.Integer(string="Sale Broker Count",
                                        compute="compute_count")
 
@@ -256,12 +257,12 @@ class PropertyDetails(models.Model):
                                     compute='_compute_document_count')
     request_count = fields.Integer(string='Request Count',
                                    compute='_compute_request_count')
-    booking_count = fields.Monetary(string='Booking Count',
+    booking_count = fields.Monetary(string='Booking Amount',
                                     compute='_compute_booking_count')
     tenancy_count = fields.Integer(string='Rent Count',
                                    compute='_compute_booking_count')
 
-    # DEPRECATED START--------------------------------------------------------------------------------------------------
+    # Legacy compatibility fields retained for existing databases
     # Pricing
     token_amount = fields.Monetary(string='Book Price')
     sale_price = fields.Monetary(string='Sale Price')
@@ -272,7 +273,10 @@ class PropertyDetails(models.Model):
 
     # Parent Property
     is_parent_property = fields.Boolean(string='Main Property')
-    parent_property_id = fields.Many2one('parent.property')
+    parent_property_id = fields.Many2one(
+        'parent.property', check_company=True,
+        domain="[('company_id', '=', company_id)]",
+    )
 
     # Nearby Connectivity
     airport = fields.Char()
@@ -320,7 +324,7 @@ class PropertyDetails(models.Model):
                                  size=4)
     buying_year = fields.Char()
     address = fields.Char()
-    sold_invoice_id = fields.Many2one('account.move')
+    sold_invoice_id = fields.Many2one('account.move', check_company=True)
     sold_invoice_state = fields.Boolean()
     certificate_ids = fields.One2many('property.certificate',
                                       'property_id',
@@ -358,7 +362,7 @@ class PropertyDetails(models.Model):
                                         ('shops', 'Shops'),
                                         ('big_hall', 'Big Hall')])
     used_for = fields.Selection([('offices', 'Offices'),
-                                 (' retail_stores', ' Retail Stores'),
+                                 ('retail_stores', 'Retail Stores'),
                                  ('shopping_centres', 'Shopping Centres'),
                                  ('hotels', 'Hotels'),
                                  ('restaurants', 'Restaurants'),
@@ -379,15 +383,19 @@ class PropertyDetails(models.Model):
         'property.commercial.measurement', 'commercial_measurement_id')
     industrial_measurement_ids = fields.One2many(
         'property.industrial.measurement', 'industrial_measurement_id')
-    total_commercial_measure = fields.Integer()
-    total_industrial_measure = fields.Integer()
+    total_commercial_measure = fields.Integer(
+        string='Total Commercial Area', compute='compute_commercial_measure', store=True
+    )
+    total_industrial_measure = fields.Integer(
+        string='Total Industrial Area', compute='compute_industrial_measure', store=True
+    )
     furnishing = fields.Selection([('fully_furnished', 'Fully Furnished'),
                                    ('only_kitchen', 'Only Kitchen Furnished'),
                                    ('only_bed', 'Only BedRoom Furnished'),
                                    ('not_furnished', 'Not Furnished'),
                                    ], string='Furnishing Property', default='fully_furnished')
 
-    # ----------------------------------------------------------------------------------------------------DEPRECATED END
+    # End legacy compatibility fields
 
     # Create, Constrain, Write, Scheduler, Name get
     # Create
@@ -413,12 +421,72 @@ class PropertyDetails(models.Model):
                 _("Only draft or available properties can be deleted: %s")
                 % ", ".join(blocked.mapped("display_name"))
             )
-        active_contracts = self.env["tenancy.details"].search_count(
-            [("property_id", "in", self.ids), ("contract_type", "in", ["running_contract", "expire_contract"])]
+        rental_history = self.env["tenancy.details"].search_count(
+            [("property_id", "in", self.ids)]
         )
-        if active_contracts:
-            raise ValidationError(_("A property linked to an active or expired rental contract cannot be deleted."))
+        sale_history = self.env["property.vendor"].search_count(
+            [("property_id", "in", self.ids)]
+        )
+        if rental_history or sale_history:
+            raise ValidationError(
+                _("A property with rental or sale history cannot be deleted. Archive or keep the property for audit history instead.")
+            )
         return super().unlink()
+
+    @api.constrains("stage", "sale_lease", "sold_booking_id")
+    def _check_stage_business_consistency(self):
+        """Prevent lifecycle corruption through direct RPC writes.
+
+        Contract lookups are batched for the whole recordset so multi-record writes
+        do not trigger one query per property.
+        """
+        if not self:
+            return
+        today = fields.Date.context_today(self)
+        running_contracts = self.env["tenancy.details"].search(
+            [
+                ("property_id", "in", self.ids),
+                ("contract_type", "=", "running_contract"),
+                ("end_date", ">=", today),
+            ]
+        )
+        reserved_property_ids = set(running_contracts.mapped("property_id").ids)
+        current_property_ids = set(
+            running_contracts.filtered(
+                lambda contract: contract.start_date
+                and contract.start_date <= today
+                and contract.end_date >= today
+            ).mapped("property_id").ids
+        )
+
+        for property_record in self:
+            has_running = property_record.id in reserved_property_ids
+            has_current = property_record.id in current_property_ids
+            sale_booking = property_record.sold_booking_id.filtered(lambda sale: sale.stage == "booked")
+
+            if property_record.stage in ("sale", "sold") and property_record.sale_lease != "for_sale":
+                raise ValidationError(_("Only a property configured For Sale can use a sale status."))
+            if property_record.stage == "on_lease" and property_record.sale_lease != "for_tenancy":
+                raise ValidationError(_("A rented property must remain configured For Rent."))
+            if property_record.stage == "sold" and (
+                not property_record.sold_booking_id
+                or property_record.sold_booking_id.stage != "sold"
+            ):
+                raise ValidationError(_("A property can be marked Sold only by a completed property sale."))
+            if property_record.stage == "booked":
+                if not sale_booking and not has_running:
+                    raise ValidationError(_("Reserved status requires an active sale booking or rental contract."))
+                if sale_booking and property_record.sale_lease != "for_sale":
+                    raise ValidationError(_("A property with an active sale booking must remain configured For Sale."))
+            if property_record.stage == "on_lease" and not has_current:
+                raise ValidationError(_("Rented status requires a currently running rental contract."))
+            if property_record.stage in ("draft", "available", "sale"):
+                if has_running:
+                    raise ValidationError(
+                        _("A property with a current or future running rental contract cannot be moved to this status.")
+                    )
+                if sale_booking:
+                    raise ValidationError(_("A property with an active sale booking must remain Reserved."))
 
     @api.depends("name", "type", "is_parent_property", "parent_property_id.name")
     def _compute_display_name(self):
@@ -434,25 +502,57 @@ class PropertyDetails(models.Model):
     # Scheduler
     @api.model
     def update_property_address(self):
-        properties = self.env['property.details'].search(
-            [('is_parent_property', '=', True), ('parent_property_id', '!=', False)])
-        for data in properties:
-            data.onchange_parent_property_address()
+        """Refresh inherited address data for units linked to a parent property."""
+        properties = self.search(
+            [('is_parent_property', '=', True), ('parent_property_id', '!=', False)]
+        )
+        properties._sync_parent_property_address()
+        return len(properties)
+
+    def _parent_property_address_vals(self):
+        self.ensure_one()
+        parent = self.parent_property_id
+        if not parent:
+            return {}
+        if parent.company_id and parent.company_id != self.company_id:
+            raise ValidationError(_("Parent property and unit must belong to the same company."))
+        return {
+            "zip": parent.zip,
+            "street": parent.street,
+            "street2": parent.street2,
+            "city": parent.city,
+            "city_id": parent.city_id.id,
+            "country_id": parent.country_id.id,
+            "state_id": parent.state_id.id,
+            "website": parent.website,
+            "landlord_id": parent.landlord_id.id,
+        }
+
+    def _sync_parent_property_address(self):
+        """Persist address/contact values inherited from the selected parent property."""
+        for property_record in self.filtered(lambda rec: rec.is_parent_property and rec.parent_property_id):
+            property_record.write(property_record._parent_property_address_vals())
+        return True
+
+    @api.onchange('is_parent_property', 'parent_property_id')
+    def onchange_parent_property_address(self):
+        """Legacy onchange entry point retained because older views/data call it."""
+        for property_record in self:
+            if property_record.is_parent_property and property_record.parent_property_id:
+                property_record.update(property_record._parent_property_address_vals())
 
     @api.model
     def update_property_measurement(self):
-        properties = self.env['property.details'].search([])
-        for data in properties:
-            if data.type == 'residential':
-                data.compute_room_measure()
-            elif data.type == 'commercial':
-                data.compute_commercial_measure()
-            elif data.type == 'industrial':
-                data.compute_industrial_measure()
+        """Refresh legacy stored measurement totals in recordset batches."""
+        properties = self.search([])
+        properties.filtered(lambda rec: rec.type == "residential").compute_room_measure()
+        properties.filtered(lambda rec: rec.type == "commercial").compute_commercial_measure()
+        properties.filtered(lambda rec: rec.type == "industrial").compute_industrial_measure()
+        return len(properties)
 
     # Compute
     # Total Measurement
-    @api.depends('room_measurement_ids', 'type', 'measure_unit', 'is_section_measurement')
+    @api.depends('room_measurement_ids.carpet_area', 'type', 'measure_unit', 'is_section_measurement')
     def compute_room_measure(self):
         for rec in self:
             total = 0
@@ -463,19 +563,41 @@ class PropertyDetails(models.Model):
             if rec.is_section_measurement:
                 rec.total_area = total
 
+    @api.depends('commercial_measurement_ids.carpet_area', 'is_section_measurement', 'type')
+    def compute_commercial_measure(self):
+        for property_record in self:
+            total = sum(property_record.commercial_measurement_ids.mapped('carpet_area'))
+            property_record.total_commercial_measure = total
+            if property_record.type == 'commercial' and property_record.is_section_measurement:
+                property_record.total_area = total
+
+    @api.depends('industrial_measurement_ids.carpet_area', 'is_section_measurement', 'type')
+    def compute_industrial_measure(self):
+        for property_record in self:
+            total = sum(property_record.industrial_measurement_ids.mapped('carpet_area'))
+            property_record.total_industrial_measure = total
+            if property_record.type == 'industrial' and property_record.is_section_measurement:
+                property_record.total_area = total
+
     # CRM Leads
     @api.depends('sale_lease')
     def _compute_lead(self):
-        groups = self.env['crm.lead']._read_group(
+        lead_model = self.env['crm.lead']
+        if not self.ids or not lead_model.browse().has_access("read"):
+            for property_record in self:
+                property_record.lead_count = 0
+                property_record.lead_opp_count = 0
+            return
+        groups = lead_model._read_group(
             [('property_id', 'in', self.ids)], ['property_id', 'type'], ['__count']
-        ) if self.ids else []
+        )
         count_map = {(property_record.id, lead_type): count for property_record, lead_type, count in groups}
         for property_record in self:
             property_record.lead_count = count_map.get((property_record.id, 'lead'), 0)
             property_record.lead_opp_count = count_map.get((property_record.id, 'opportunity'), 0)
 
     # Utility Service Total
-    @api.depends('extra_service_ids')
+    @api.depends('extra_service_ids.price')
     def _compute_extra_service_cost(self):
         for rec in self:
             amount = 0.0
@@ -589,31 +711,30 @@ class PropertyDetails(models.Model):
         return True
 
     def action_in_booked(self):
-        for rec in self:
-            rec.stage = 'booked'
+        self.write({"stage": "booked"})
+        return True
 
     def action_sold(self):
-        for rec in self:
-            rec.stage = 'sold'
+        if not self.env.user.has_group("rental_management.property_rental_manager"):
+            raise UserError(_("Only a Rental Manager can confirm a property as sold."))
+        for property_record in self:
+            if not property_record.sold_booking_id or property_record.sold_booking_id.stage != "sold":
+                raise UserError(
+                    _("Complete the property sale workflow before marking the property as Sold.")
+                )
+        self.write({"stage": "sold"})
+        return True
 
     def action_draft_property(self):
-        self.stage = "draft"
+        self.write({"stage": "draft"})
+        return True
 
     def action_in_sale(self):
         self.ensure_one()
-        if self.sale_lease == 'for_sale':
-            self.stage = 'sale'
-        else:
-            message = {
-                'type': 'ir.actions.client',
-                'tag': 'display_notification',
-                'params': {
-                    'type': 'info',
-                    'title': 'You need to set "Price/Rent" to "For Sale" to proceed',
-                    'sticky': False,
-                }
-            }
-            return message
+        if self.sale_lease != "for_sale":
+            raise UserError(_("Set Property For to Sale before moving the property to For Sale."))
+        self.write({"stage": "sale"})
+        return True
 
     # G-map Location
     def action_gmap_location(self):
@@ -734,6 +855,8 @@ class PropertyDetails(models.Model):
 
     def action_create_rental_contract(self):
         self.ensure_one()
+        if self.sale_lease != "for_tenancy":
+            raise UserError(_("Only a property configured for rent can be used to create a rental contract."))
         if self.stage != "available":
             raise UserError(_("Only an available property can be used to create a rental contract."))
         return {
@@ -845,11 +968,17 @@ class PropertyDetails(models.Model):
             outstanding_amount = 0.0
             overdue_invoice = 0
             pending_invoice = 0
-        monthly_contracts = contract_model.search(
-            company_domain
-            + [("contract_type", "=", "running_contract"), ("payment_term", "=", "monthly")]
+        running_contracts = contract_model.search(
+            company_domain + [("contract_type", "=", "running_contract")]
         )
-        monthly_rent = sum(monthly_contracts.mapped("total_rent"))
+        monthly_rent = sum(
+            contract.total_rent
+            if contract.rent_unit == "Month"
+            else contract.total_rent / 12.0
+            if contract.rent_unit == "Year"
+            else contract.total_rent * 30.0
+            for contract in running_contracts
+        )
         total_rentable = sum(
             stage_counts.get(stage, 0) for stage in ("available", "booked", "on_lease")
         )
@@ -1050,8 +1179,9 @@ class PropertyRoomMeasurement(models.Model):
                           default='ft²',
                           readonly=True,
                           translate=True)
-    room_measurement_id = fields.Many2one('property.details',
-                                          string='Room Details')
+    room_measurement_id = fields.Many2one(
+        'property.details', string='Room Details', ondelete='cascade', index=True
+    )
     measure_unit = fields.Selection(related="room_measurement_id.measure_unit",
                                     store=True)
     sq_ft = fields.Float(string="Total Square Feet")
@@ -1077,9 +1207,10 @@ class PropertyDocuments(models.Model):
     _description = 'Document related to Property'
     _rec_name = 'doc_type'
 
-    property_id = fields.Many2one('property.details',
-                                  string='Property Name',
-                                  readonly=True)
+    property_id = fields.Many2one(
+        'property.details', string='Property Name', readonly=True,
+        ondelete='cascade', index=True,
+    )
     document_date = fields.Date(string='Date', default=fields.Date.today)
     doc_type = fields.Selection([('photos', 'Photo'),
                                  ('brochure', 'Brochure'),
@@ -1128,7 +1259,9 @@ class FloorPlan(models.Model):
 
     title = fields.Char(string='Title', translate=True)
     sequence = fields.Integer(default=10)
-    property_id = fields.Many2one('property.details', string='Property')
+    property_id = fields.Many2one(
+        'property.details', string='Property', ondelete='cascade', index=True
+    )
     image = fields.Image(string='Image ')
     video_url = fields.Char("Video URL",
                             help="URL of a video for showcasing your property.")
@@ -1176,9 +1309,10 @@ class PropertyImages(models.Model):
 
     title = fields.Char(string='Title', translate=True)
     sequence = fields.Integer(default=10)
-    property_id = fields.Many2one('property.details',
-                                  string='Property Name',
-                                  readonly=True)
+    property_id = fields.Many2one(
+        'property.details', string='Property Name', readonly=True,
+        ondelete='cascade', index=True,
+    )
     image = fields.Image(string='Images')
     video_url = fields.Char("Video URL",
                             help="URL of a video for showcasing your property.")
@@ -1247,8 +1381,9 @@ class ExtraServiceLine(models.Model):
                                      ('monthly', 'Recurring')],
                                     string="Type",
                                     default="once")
-    property_id = fields.Many2one('property.details',
-                                  string="Property")
+    property_id = fields.Many2one(
+        'property.details', string="Property", ondelete='cascade', index=True
+    )
 
     @api.onchange('service_id')
     def _onchange_service_id_price(self):
@@ -1281,7 +1416,9 @@ class PropertyConnectivityLine(models.Model):
     _name = 'property.connectivity.line'
     _description = "Property Connectivity Line"
 
-    property_id = fields.Many2one('property.details')
+    property_id = fields.Many2one(
+        'property.details', ondelete='cascade', index=True
+    )
     connectivity_id = fields.Many2one('property.connectivity',
                                       string="Nearby Connectivity")
     name = fields.Char(string="Name", translate=True)
@@ -1294,13 +1431,16 @@ class TenancyInquiry(models.Model):
     _name = 'tenancy.inquiry'
     _description = "Rent Inquiry"
     _rec_name = 'lead_id'
+    _check_company_auto = True
 
-    property_id = fields.Many2one('property.details',
-                                  string="Property Details")
+    property_id = fields.Many2one('property.details', string="Property Details", check_company=True)
+    company_id = fields.Many2one(
+        'res.company', related='property_id.company_id', string='Company', store=True, index=True
+    )
     note = fields.Text(string="Note", translate=True)
     duration_id = fields.Many2one('contract.duration', string='Duration')
-    customer_id = fields.Many2one('res.partner', string="Customer")
-    lead_id = fields.Many2one('crm.lead', string="Lead")
+    customer_id = fields.Many2one('res.partner', string="Customer", check_company=True)
+    lead_id = fields.Many2one('crm.lead', string="Lead", check_company=True)
 
     @api.depends("customer_id.name", "lead_id.name")
     def _compute_display_name(self):
@@ -1314,21 +1454,19 @@ class SaleInquiry(models.Model):
     _name = 'sale.inquiry'
     _description = "Sale Inquiry"
     _rec_name = 'lead_id'
+    _check_company_auto = True
 
-    property_id = fields.Many2one('property.details',
-                                  string="Property Details")
+    property_id = fields.Many2one('property.details', string="Property Details", check_company=True)
+    company_id = fields.Many2one(
+        'res.company', related='property_id.company_id', string='Company', store=True, index=True
+    )
     note = fields.Text(string="Note", translate=True)
-    company_id = fields.Many2one('res.company',
-                                 string='Company',
-                                 default=lambda self: self.env.company)
     currency_id = fields.Many2one('res.currency',
                                   related='company_id.currency_id',
                                   string='Currency')
     ask_price = fields.Monetary(string="Ask Price")
-    customer_id = fields.Many2one('res.partner',
-                                  string="Customer")
-    lead_id = fields.Many2one('crm.lead',
-                              string="Lead")
+    customer_id = fields.Many2one('res.partner', string="Customer", check_company=True)
+    lead_id = fields.Many2one('crm.lead', string="Lead", check_company=True)
 
     @api.depends("customer_id.name", "lead_id.name")
     def _compute_display_name(self):
@@ -1373,7 +1511,7 @@ class PropertyFurnishing(models.Model):
     name = fields.Char(string="Title")
 
 
-# DEPRECATED MODEL START---------------------------------------------------------------------------------------
+# Legacy compatibility models retained for existing databases
 class PropertyCommercialMeasurement(models.Model):
     _name = 'property.commercial.measurement'
     _description = 'Commercial Property Measurement Details'
@@ -1386,7 +1524,8 @@ class PropertyCommercialMeasurement(models.Model):
     measure = fields.Char(string='ft²', default='ft²',
                           readonly=True, translate=True)
     commercial_measurement_id = fields.Many2one(
-        'property.details', string='Commercial Details')
+        'property.details', string='Commercial Details', ondelete='cascade', index=True
+    )
     no_of_unit = fields.Integer(string="No of Unit", default=1)
     measure_unit = fields.Selection(
         related="commercial_measurement_id.measure_unit", store=True)
@@ -1434,13 +1573,13 @@ class PropertyCommercialMeasurement(models.Model):
                 cu_ft = total * rec.height
                 sq_ft = cu_ft / rec.height
                 sq_m = (cu_ft / rec.height) * 0.092903
-                sq_yd = cu_ft / (rec.height / 3)
+                sq_yd = sq_ft / 9.0
                 cu_m = cu_ft * 0.0283168
             elif rec.measure_unit == 'cu_m' and rec.height > 0:
                 cu_m = total * rec.height
                 sq_ft = (cu_m / rec.height) * 10.764
                 sq_m = cu_m / rec.height
-                sq_yd = (cu_m / 1.0) / (rec.height * 1.0936)
+                sq_yd = sq_m * 1.19599
                 cu_ft = cu_m * 35.315
             rec.carpet_area = total
             rec.sq_ft = sq_ft
@@ -1462,7 +1601,8 @@ class PropertyIndustrialMeasurement(models.Model):
     measure = fields.Char(string='ft²', default='ft²',
                           readonly=True, translate=True)
     industrial_measurement_id = fields.Many2one(
-        'property.details', string='Industrial Details')
+        'property.details', string='Industrial Details', ondelete='cascade', index=True
+    )
     no_of_unit = fields.Integer(string="No of Unit", default=1)
     measure_unit = fields.Selection(
         related="industrial_measurement_id.measure_unit", store=True)
@@ -1510,13 +1650,13 @@ class PropertyIndustrialMeasurement(models.Model):
                 cu_ft = total * rec.height
                 sq_ft = cu_ft / rec.height
                 sq_m = (cu_ft / rec.height) * 0.092903
-                sq_yd = cu_ft / (rec.height / 3)
+                sq_yd = sq_ft / 9.0
                 cu_m = cu_ft * 0.0283168
             elif rec.measure_unit == 'cu_m' and rec.height > 0:
                 cu_m = total * rec.height
                 sq_ft = (cu_m / rec.height) * 10.764
                 sq_m = cu_m / rec.height
-                sq_yd = (cu_m / 1.0) / (rec.height * 1.0936)
+                sq_yd = sq_m * 1.19599
                 cu_ft = cu_m * 35.315
             rec.carpet_area = total
             rec.sq_ft = sq_ft
@@ -1543,18 +1683,21 @@ class PropertyCertificate(models.Model):
     expiry_date = fields.Date(string='Expiry Date')
     responsible = fields.Char(string='Responsible', translate=True)
     note = fields.Char(string='Note', translate=True)
-    property_id = fields.Many2one('property.details', string='Property')
+    property_id = fields.Many2one(
+        'property.details', string='Property', ondelete='cascade', index=True
+    )
 
 
 class ParentProperty(models.Model):
     _name = 'parent.property'
     _description = 'Parent Property Details'
+    _check_company_auto = True
 
     name = fields.Char(string='Name', translate=True)
     image = fields.Binary(string='Image')
-    company_id = fields.Many2one('res.company',
-                                 string='Company',
-                                 default=lambda self: self.env.company)
+    company_id = fields.Many2one(
+        'res.company', string='Company', default=lambda self: self.env.company, index=True
+    )
     amenities_ids = fields.Many2many('property.amenities', string='Amenities')
     property_specification_ids = fields.Many2many('property.specification',
                                                   string='Specification')
@@ -1568,8 +1711,10 @@ class ParentProperty(models.Model):
                                string='State',
                                readonly=False, store=True,
                                domain="[('country_id', '=?', country_id)]")
-    landlord_id = fields.Many2one('res.partner', string='LandLord', domain=[
-        ('user_type', '=', 'landlord')])
+    landlord_id = fields.Many2one(
+        'res.partner', string='LandLord', check_company=True,
+        domain=[('user_type', '=', 'landlord')],
+    )
     website = fields.Char(string='Website', translate=True)
     airport = fields.Char(string='Airport')
     national_highway = fields.Char(string='National Highway', translate=True)
@@ -1634,4 +1779,4 @@ class ParentProperty(models.Model):
             'target': 'current'
         }
 
-# ------------------------------------------------------------------------------------------DEPRECATED MODEL END
+# End legacy compatibility models

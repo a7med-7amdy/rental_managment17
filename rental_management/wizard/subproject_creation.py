@@ -3,7 +3,8 @@
 # Part of TechKhedut. See LICENSE file for full copyright and licensing details.
 
 
-from odoo import api, fields, models
+from odoo import _, api, fields, models
+from odoo.exceptions import UserError, ValidationError
 from odoo.fields import Command
 
 
@@ -17,12 +18,17 @@ class SubprojectCreation(models.TransientModel):
     units_per_floor = fields.Integer(string="Units per Floor")
 
     def create_sub_project(self):
+        self.ensure_one()
         images = []
         nearby = []
-        active_id = self._context.get("active_id", False)
+        active_id = self.env.context.get("active_id")
         if not active_id:
-            return
-        project_id = self.env["property.project"].browse(active_id)
+            raise UserError(_("Open this wizard from a property project."))
+        project_id = self.env["property.project"].browse(active_id).exists()
+        if not project_id:
+            raise UserError(_("The source property project no longer exists."))
+        if self.floors < 0 or self.units_per_floor < 0:
+            raise ValidationError(_("Floors and units per floor cannot be negative."))
         data = {
             "name": self.name,
             "project_sequence": self.project_sequence,
@@ -36,7 +42,6 @@ class SubprojectCreation(models.TransientModel):
             "zip": project_id.zip,
             "total_floors": self.floors,
             "units_per_floor": self.units_per_floor,
-            'sale_lease': project_id.sale_lease 
         }
         if project_id.avail_description:
             data['avail_description'] = project_id.avail_description
@@ -68,7 +73,7 @@ class SubprojectCreation(models.TransientModel):
                 }))
             data['subproject_connectivity_ids'] = nearby
 
-        sub_project_id = self.env["property.sub.project"].create(data)
+        sub_project_id = self.env["property.sub.project"].with_company(project_id.company_id).create(data)
         return {
             'type': 'ir.actions.act_window',
             'name': ('Sub Projects'),

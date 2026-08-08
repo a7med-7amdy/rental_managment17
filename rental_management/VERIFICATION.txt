@@ -1,11 +1,29 @@
-rental_management 19.0.1.0.11 verification
-Python files: 46 PASS
-XML files: 58 PASS
-Explicit XML IDs: 276 PASS
+rental_management 19.0.1.0.12 — final package verification
+
+Workspace static audit: PASS
+Python files: 49
+XML files: 58
+Explicit XML IDs: 293
+ACL rows: 111
+Custom models: 52
+Custom models with ACL coverage: 52 / 52
+Object button targets: 71
+Cron method targets: 8
+JavaScript files: 1
+Translation PO files: 6
+Automated test methods: 45
+Duplicate class members: 0
 Duplicate XML IDs: 0
-ACL CSV rows: 109 PASS
-Dedicated maintenance ACL XML: PASS
-Automated test methods: 39
-Deprecated .read_group calls: 0
-Custom _check_company collision: 0
+Missing custom compute/inverse/search methods: 0
+Missing local rental_management env.ref targets: 0
+Deprecated backend .read_group calls: 0
 Legacy tree/attrs/states patterns: 0
+Old web_editor imports: 0
+Old detailed_type fields: 0
+print/TODO/FIXME/manual commit patterns: 0
+Original custom models missing: 0
+Original technical fields missing: 0 (crm.lead.company_id is intentionally inherited from Odoo Core)
+
+Latest supplied Odoo.sh evidence (previous build): 39 post-install tests, 0 assertion failures, 3 runtime errors, all Maintenance access/default related. Those root causes are changed in this build.
+
+IMPORTANT: this exact 19.0.1.0.12 build has not been executed locally with odoo-bin because Odoo 19 Enterprise/PostgreSQL is unavailable in this environment. Runtime success is therefore not claimed until Odoo.sh executes this exact package.

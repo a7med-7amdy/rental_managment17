@@ -66,7 +66,9 @@ class TestPortalOwnership(RentalCommon):
             }
         )
         self.assertTrue(maintenance.maintenance_team_id)
+        self.assertTrue(maintenance.stage_id)
         self.assertEqual(maintenance.tenancy_id, self.contract_a)
+        self.assertEqual(maintenance.sudo().create_uid, self.portal_a)
 
     def test_portal_cannot_create_request_for_other_contract(self):
         with self.assertRaises(AccessError):

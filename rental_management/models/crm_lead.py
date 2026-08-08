@@ -7,21 +7,23 @@ from odoo import api, fields, models
 class PropertyInquiry(models.Model):
     _inherit = 'crm.lead'
 
-    property_id = fields.Many2one('property.details', string='Property',
-                                  domain="['|',('stage','=','available'),('stage','=','sale')]")
+    property_id = fields.Many2one(
+        'property.details',
+        string='Property',
+        check_company=True,
+        domain="[('company_id', '=', company_id), '|', ('stage', '=', 'available'), ('stage', '=', 'sale')]",
+    )
     sale_lease = fields.Selection(related='property_id.sale_lease', string='Selected Property For')
     price = fields.Monetary(related="property_id.price", string="Selected Property Price")
 
-    # For sale
-    company_id = fields.Many2one('res.company',
-                                 string='Company',
-                                 default=lambda self: self.env.company)
+    # For sale. company_id is inherited unchanged from crm.lead so Odoo's
+    # native computed/stored multi-company behavior remains intact.
     currency_id = fields.Many2one('res.currency',
                                   related='company_id.currency_id',
                                   string='Currency ')
     ask_price = fields.Monetary(string="Ask Price")
 
-    # DEPRECATED
+    # Legacy compatibility field retained for existing databases
     duration_id = fields.Many2one('contract.duration', string='Duration')
     booking_id = fields.Many2one("property.vendor", string="Booking")
     tenancy_inquiry_id = fields.Many2one('tenancy.inquiry',
@@ -50,7 +52,7 @@ class PropertyInquiry(models.Model):
                                     string="Pricing Type",
                                     default='fixed')
     domain_sale_lease = fields.Selection([
-        # ('for_sale', 'Sale'),
+        ('for_sale', 'Sale'),
         ('for_tenancy', 'Rent')],
         string='Requested Property For',
         default='for_tenancy',
@@ -67,9 +69,13 @@ class PropertyInquiry(models.Model):
         comodel_name='property.details',
         string='Available Properties', compute='get_available_property_ids')
 
-    property_domain_fields = ['measure_unit', 'price_per_area', 'domain_sale_lease', 'pricing_type', 'rent_unit',
-                              'property_price', 'usable_area', 'total_area', 'property_subtype_id', 'property_type']
+    property_domain_fields = [
+        'company_id', 'measure_unit', 'price_per_area', 'domain_sale_lease',
+        'pricing_type', 'rent_unit', 'property_price', 'usable_area',
+        'total_area', 'property_subtype_id', 'property_type',
+    ]
     property_domain_equal_field_dict = {
+        'company_id': 'company_id',
         'domain_sale_lease': 'sale_lease',
         'property_price': 'price',
         'property_type': 'type',
@@ -81,7 +87,9 @@ class PropertyInquiry(models.Model):
         for rec in self:
             domain = [('stage', 'in', ['available', 'sale'])]
             for f in self.property_domain_fields:
-                f_value = rec[f] if f not in ['property_subtype_id'] else rec[f].id
+                f_value = rec[f]
+                if f in ('property_subtype_id', 'company_id'):
+                    f_value = f_value.id
                 if f_value:
                     domain += [(f"{self.property_domain_equal_field_dict.get(f, f) or f}",
                                 f"{self.property_domain_field_operator_dict.get(f, '=') or '='}", f_value)]

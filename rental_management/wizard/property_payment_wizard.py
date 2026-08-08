@@ -26,7 +26,9 @@ class PropertyPayment(models.TransientModel):
     invoice_date = fields.Date(string="Date", required=True, default=fields.Date.context_today)
     rent_amount = fields.Monetary(related="tenancy_id.total_rent")
     amount = fields.Monetary(string="Amount", required=True)
-    rent_invoice_id = fields.Many2one("account.move", string="Invoice", readonly=True)
+    rent_invoice_id = fields.Many2one(
+        "account.move", string="Invoice", readonly=True, check_company=True
+    )
     service_id = fields.Many2one("product.product", string="Product", required=True, check_company=True)
     tax_ids = fields.Many2many(
         "account.tax",
@@ -44,17 +46,34 @@ class PropertyPayment(models.TransientModel):
             values["service_id"] = contract.installment_item_id.id
         return values
 
-    @api.constrains("amount")
+    @api.constrains("amount", "tax_ids", "company_id")
     def _check_amount(self):
         for wizard in self:
             if wizard.amount <= 0:
                 raise ValidationError(_("Invoice amount must be greater than zero."))
+            if wizard.tax_ids.filtered(lambda tax: tax.company_id != wizard.company_id):
+                raise ValidationError(_("All selected taxes must belong to the rental contract company."))
 
     def property_payment_action(self):
         self.ensure_one()
+        self.env.cr.execute(
+            "SELECT id FROM property_payment_wizard WHERE id = %s FOR UPDATE",
+            (self.id,),
+        )
+        self.invalidate_recordset(["rent_invoice_id"])
+        if self.rent_invoice_id:
+            return {
+                "type": "ir.actions.act_window",
+                "res_model": "account.move",
+                "res_id": self.rent_invoice_id.id,
+                "view_mode": "form",
+            }
         contract = self.tenancy_id
         if contract.contract_type != "running_contract":
             raise UserError(_("Additional invoices can only be created for a running contract."))
+        move_model = self.env["account.move"].with_company(contract.company_id)
+        if not move_model.browse().has_access("create"):
+            raise UserError(_("Billing invoice creation access is required to create this invoice."))
         schedule = self.env["rent.invoice"].create(
             {
                 "tenancy_id": contract.id,
@@ -66,22 +85,13 @@ class PropertyPayment(models.TransientModel):
                 "due_date": self.invoice_date,
                 "invoice_date": self.invoice_date,
                 "amount": self.amount,
+                "charge_amount": self.amount,
+                "charge_product_id": self.service_id.id,
+                "charge_tax_ids": [Command.set(self.tax_ids.ids)],
                 "description": self.description,
             }
         )
-        line_vals = {
-            "product_id": self.service_id.id,
-            "name": self.description,
-            "quantity": 1.0,
-            "price_unit": self.amount,
-        }
-        if self.tax_ids:
-            line_vals["tax_ids"] = [Command.set(self.tax_ids.ids)]
-        move_vals = contract._prepare_rent_invoice_vals(schedule, [Command.create(line_vals)])
-        move = self.env["account.move"].with_company(contract.company_id).create(move_vals)
-        if contract._get_invoice_post_type() == "automatically":
-            move.action_post()
-        schedule.write({"rent_invoice_id": move.id, "amount": move.amount_total})
+        move = schedule._create_account_move()
         self.rent_invoice_id = move
         return {
             "type": "ir.actions.act_window",

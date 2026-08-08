@@ -17,7 +17,8 @@ class ContractWizard(models.TransientModel):
     _check_company_auto = True
 
     customer_id = fields.Many2one(
-        "res.partner", string="Customer", domain="[('user_type', '=', 'customer')]", required=True
+        "res.partner", string="Customer", domain="[('user_type', '=', 'customer')]",
+        required=True, check_company=True,
     )
     currency_id = fields.Many2one("res.currency", related="company_id.currency_id")
     company_id = fields.Many2one(
@@ -32,7 +33,7 @@ class ContractWizard(models.TransientModel):
         string="Property",
         required=True,
         check_company=True,
-        domain="[('stage', '=', 'available'), ('company_id', '=', company_id)]",
+        domain="[('sale_lease', '=', 'for_tenancy'), ('stage', '=', 'available'), ('company_id', '=', company_id)]",
     )
     rent_unit = fields.Selection(related="property_id.rent_unit")
     total_rent = fields.Monetary(related="property_id.price", string="Rent", readonly=False)
@@ -68,7 +69,9 @@ class ContractWizard(models.TransientModel):
     )
 
     is_any_broker = fields.Boolean(string="Any Broker?")
-    broker_id = fields.Many2one("res.partner", string="Broker", domain="[('user_type', '=', 'broker')]")
+    broker_id = fields.Many2one(
+        "res.partner", string="Broker", domain="[('user_type', '=', 'broker')]", check_company=True
+    )
     rent_type = fields.Selection(
         [("once", "One Period"), ("e_rent", "All Contract Periods")], string="Brokerage Type"
     )
@@ -87,13 +90,14 @@ class ContractWizard(models.TransientModel):
     broker_commission_percentage = fields.Float(string="Percentage")
 
     from_inquiry = fields.Boolean("From Enquiry")
-    lead_id = fields.Many2one("crm.lead", string="Enquiry", domain="[('property_id', '=', property_id)]")
-    inquiry_id = fields.Many2one("tenancy.inquiry", string="Inquiry")
+    lead_id = fields.Many2one("crm.lead", string="Enquiry", check_company=True, domain="[('property_id', '=', property_id)]")
+    inquiry_id = fields.Many2one("tenancy.inquiry", string="Inquiry", check_company=True)
     note = fields.Text(string="Note", translate=True)
 
     agreement = fields.Html(string="Agreement")
     agreement_template_id = fields.Many2one(
-        "agreement.template", string="Agreement Template", domain="[('company_id', '=', company_id)]"
+        "agreement.template", string="Agreement Template", check_company=True,
+        domain="[('company_id', '=', company_id)]"
     )
     installment_item_id = fields.Many2one("product.product", string="Installment Item", check_company=True)
     deposit_item_id = fields.Many2one("product.product", string="Deposit Item", check_company=True)

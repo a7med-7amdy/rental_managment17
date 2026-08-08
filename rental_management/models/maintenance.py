@@ -21,11 +21,20 @@ class PropertyMaintenance(models.Model):
         "res.company", string="Company", required=True, default=lambda self: self.env.company, index=True
     )
     currency_id = fields.Many2one("res.currency", related="company_id.currency_id", store=True)
-    landlord_id = fields.Many2one("res.partner", string="Landlord", index=True)
+    landlord_id = fields.Many2one(
+        "res.partner", string="Landlord", index=True, check_company=True
+    )
     maintenance_type_id = fields.Many2one(
         "product.template",
         string="Type",
+        check_company=True,
         domain="[('is_maintenance', '=', True), '|', ('company_id', '=', False), ('company_id', '=', company_id)]",
+    )
+    maintenance_type_name = fields.Char(
+        related="maintenance_type_id.name", string="Maintenance Type", store=True, readonly=True
+    )
+    rental_stage_name = fields.Char(
+        related="stage_id.name", string="Maintenance Stage", store=True, readonly=True
     )
     price = fields.Float(related="maintenance_type_id.list_price", string="Price")
     invoice_id = fields.Many2one("account.move", string="Invoice", copy=False, check_company=True)
@@ -34,18 +43,9 @@ class PropertyMaintenance(models.Model):
 
     @api.model
     def _get_rental_maintenance_team(self, company):
-        """Return a deterministic, company-compatible team for rental requests.
-
-        Odoo 19 intentionally lets normal internal users *read* maintenance teams but
-        reserves team creation to Maintenance/Equipment Managers.  Rental users and
-        portal users therefore reuse existing configuration.  The lookup is sudoed
-        only for the team lookup; the maintenance request itself is still created
-        with the caller's normal ACLs and record rules.
-        """
+        """Return an existing, company-compatible team for a rental request."""
         company.ensure_one()
         team_model = self.env["maintenance.team"].sudo().with_company(company)
-
-        # Prefer a team explicitly configured for the request company.
         team = team_model.search(
             [("company_id", "=", company.id), ("active", "=", True)],
             order="id",
@@ -53,8 +53,6 @@ class PropertyMaintenance(models.Model):
         )
         if team:
             return team
-
-        # Fall back deterministically to the module-owned shared team.
         rental_team = self.env.ref(
             "rental_management.maintenance_team_rental", raise_if_not_found=False
         )
@@ -62,9 +60,6 @@ class PropertyMaintenance(models.Model):
             not rental_team.company_id or rental_team.company_id == company
         ):
             return rental_team.sudo().with_company(company)
-
-        # Legacy databases may not yet have the new XML ID. Reuse any shared team
-        # rather than creating configuration behind the user's back.
         return team_model.search(
             [("company_id", "=", False), ("active", "=", True)],
             order="id",
@@ -72,72 +67,185 @@ class PropertyMaintenance(models.Model):
         )
 
     @api.model
-    def _prepare_rental_request_security(self, vals):
-        """Validate rental ownership/role before creating a linked request.
+    def _get_rental_maintenance_stage(self):
+        """Return the first maintenance stage without leaking configuration access."""
+        return self.env["maintenance.stage"].sudo().search([], order="sequence, id", limit=1)
 
-        Odoo's core maintenance ACLs can differ between deployed 19.0 builds.
-        This module therefore grants the base model permission explicitly, then
-        applies rental-specific authorization here whenever ``tenancy_id`` is used.
-        Non-rental maintenance requests keep the standard Maintenance behavior.
+    @api.model
+    def _prepare_rental_request_security(self, vals):
+        """Authorize and normalize a request linked to rental/property data.
+
+        Core Maintenance ACLs and defaults are intentionally not used as the
+        authorization boundary for rental-linked requests.  Ownership, rental
+        role, company and property consistency are checked here first.
         """
         vals = dict(vals)
         user = self.env.user
         is_portal = user.has_group("base.group_portal")
-        tenancy_id = vals.get("tenancy_id")
-
-        if is_portal and not tenancy_id:
-            raise AccessError(_("Portal users can only create maintenance requests from one of their rental contracts."))
-
-        if not tenancy_id:
-            return vals
-
-        tenancy = self.env["tenancy.details"].browse(tenancy_id).exists()
-        if not tenancy:
-            raise ValidationError(_("The selected rental contract does not exist."))
-
-        # check_access includes both model ACLs and record rules. For portal users
-        # this is the ownership check; for internal rental users it also enforces
-        # allowed-company isolation.
-        tenancy.check_access("read")
-
-        if is_portal:
-            if tenancy.tenancy_id.commercial_partner_id != user.partner_id.commercial_partner_id:
-                raise AccessError(_("You can only create maintenance requests for your own rental contracts."))
-            if tenancy.contract_type != "running_contract":
-                raise ValidationError(_("Maintenance requests can only be created for an active rental contract."))
-        elif not (
+        is_rental_user = (
             user.has_group("rental_management.property_rental_officer")
             or user.has_group("rental_management.property_rental_manager")
-        ):
-            raise AccessError(_("Only Rental Officers or Rental Managers can create maintenance requests linked to rental contracts."))
+        )
+        tenancy_id = vals.get("tenancy_id")
+        property_id = vals.get("property_id")
 
-        if vals.get("property_id") and vals["property_id"] != tenancy.property_id.id:
-            raise ValidationError(_("Maintenance property must match the rental contract property."))
-        if vals.get("company_id") and vals["company_id"] != tenancy.company_id.id:
-            raise ValidationError(_("Maintenance request and contract companies must match."))
+        if is_portal and not tenancy_id:
+            raise AccessError(
+                _("Portal users can only create maintenance requests from one of their rental contracts.")
+            )
 
-        vals.setdefault("property_id", tenancy.property_id.id)
-        vals.setdefault("company_id", tenancy.company_id.id)
-        if tenancy.property_landlord_id:
-            vals.setdefault("landlord_id", tenancy.property_landlord_id.id)
+        tenancy = self.env["tenancy.details"]
+        property_record = self.env["property.details"]
+        if tenancy_id:
+            tenancy = self.env["tenancy.details"].browse(tenancy_id).exists()
+            if not tenancy:
+                raise ValidationError(_("The selected rental contract does not exist."))
+            tenancy.check_access("read")
+
+            if is_portal:
+                if tenancy.tenancy_id.commercial_partner_id != user.partner_id.commercial_partner_id:
+                    raise AccessError(
+                        _("You can only create maintenance requests for your own rental contracts.")
+                    )
+                if tenancy.contract_type != "running_contract":
+                    raise ValidationError(
+                        _("Maintenance requests can only be created for an active rental contract.")
+                    )
+            elif not (is_rental_user or self.env.su):
+                raise AccessError(
+                    _("Only Rental Officers or Rental Managers can create maintenance requests linked to rental contracts.")
+                )
+
+            property_record = tenancy.property_id
+            if property_id and property_id != property_record.id:
+                raise ValidationError(_("Maintenance property must match the rental contract property."))
+            if vals.get("company_id") and vals["company_id"] != tenancy.company_id.id:
+                raise ValidationError(_("Maintenance request and contract companies must match."))
+
+            vals["property_id"] = property_record.id
+            vals["company_id"] = tenancy.company_id.id
+            if tenancy.property_landlord_id:
+                vals.setdefault("landlord_id", tenancy.property_landlord_id.id)
+        elif property_id:
+            property_record = self.env["property.details"].browse(property_id).exists()
+            if not property_record:
+                raise ValidationError(_("The selected property does not exist."))
+            property_record.check_access("read")
+            if is_portal:
+                raise AccessError(
+                    _("Portal users must create maintenance requests from an active rental contract.")
+                )
+            if not (is_rental_user or self.env.su):
+                raise AccessError(
+                    _("Only Rental Officers or Rental Managers can create maintenance requests linked to rental properties.")
+                )
+            if vals.get("company_id") and vals["company_id"] != property_record.company_id.id:
+                raise ValidationError(_("Maintenance request and property companies must match."))
+            vals["company_id"] = property_record.company_id.id
+            landlord = property_record.parent_landlord_id if property_record.is_parent_property else property_record.landlord_id
+            if landlord:
+                vals.setdefault("landlord_id", landlord.id)
+
+            # Link the current running contract automatically when there is exactly
+            # one.  This keeps property-created requests visible in the tenant portal.
+            today = fields.Date.context_today(self)
+            active_contract = self.env["tenancy.details"].search(
+                [
+                    ("property_id", "=", property_record.id),
+                    ("contract_type", "=", "running_contract"),
+                    ("start_date", "<=", today),
+                    ("end_date", ">=", today),
+                ],
+                order="start_date desc, id desc",
+                limit=1,
+            )
+            if active_contract:
+                vals["tenancy_id"] = active_contract.id
+
+        linked_to_rental = bool(vals.get("tenancy_id") or vals.get("property_id"))
+        return vals, linked_to_rental
+
+    @api.model
+    def _prepare_rental_maintenance_defaults(self, vals):
+        """Fill required core Maintenance defaults using read-only sudo lookups."""
+        vals = dict(vals)
+        company = self.env["res.company"].browse(vals.get("company_id")).exists() or self.env.company
+        if not vals.get("maintenance_team_id"):
+            team = self._get_rental_maintenance_team(company)
+            if not team:
+                raise UserError(
+                    _("Configure at least one Maintenance Team for company %s before creating a maintenance request.")
+                    % company.display_name
+                )
+            vals["maintenance_team_id"] = team.id
+        if not vals.get("stage_id"):
+            stage = self._get_rental_maintenance_stage()
+            if not stage:
+                raise UserError(_("Configure at least one Maintenance Stage before creating a maintenance request."))
+            vals["stage_id"] = stage.id
+        vals.setdefault("owner_user_id", self.env.user.id)
         return vals
 
     @api.model_create_multi
     def create(self, vals_list):
-        prepared_vals = []
+        """Create rental-linked requests after explicit authorization.
+
+        Odoo 19 Maintenance performs defaults and a post-create access check on
+        configuration models which Portal and rental-only users may not read.
+        For a request that has passed the rental ownership/role checks above,
+        core creation is therefore executed in superuser mode.  ``sudo()`` keeps
+        the original user id in Odoo, so ``create_uid`` remains the caller while
+        ACL/record-rule bypass is narrowly limited to this authorized creation.
+        Unrelated Maintenance requests always use standard core security.
+        """
+        prepared = []
+        linked_flags = []
         for incoming in vals_list:
-            vals = self._prepare_rental_request_security(incoming)
-            if not vals.get("maintenance_team_id"):
-                company = self.env["res.company"].browse(vals.get("company_id")).exists() or self.env.company
-                team = self._get_rental_maintenance_team(company)
-                if not team:
-                    raise UserError(
-                        _("Configure at least one Maintenance Team for company %s before creating a maintenance request.")
-                        % company.display_name
-                    )
-                vals["maintenance_team_id"] = team.id
-            prepared_vals.append(vals)
-        return super().create(prepared_vals)
+            vals, linked = self._prepare_rental_request_security(incoming)
+            if linked:
+                vals = self._prepare_rental_maintenance_defaults(vals)
+            prepared.append(vals)
+            linked_flags.append(linked)
+
+        if all(linked_flags):
+            records = super(PropertyMaintenance, self.sudo()).create(prepared)
+            return records.sudo(False)
+        if not any(linked_flags):
+            return super().create(prepared)
+
+        # Mixed batches are uncommon but must preserve the security policy of each
+        # item.  Keep input order and elevate only rental-linked entries.
+        records = self.browse()
+        for vals, linked in zip(prepared, linked_flags):
+            if linked:
+                record = super(PropertyMaintenance, self.sudo()).create([vals]).sudo(False)
+            else:
+                record = super().create([vals])
+            records |= record
+        return records
+
+    def write(self, vals):
+        """Protect rental linkage on direct RPC writes as well as on creation."""
+        security_fields = {"tenancy_id", "property_id", "company_id"}
+        if security_fields.intersection(vals):
+            for request_record in self:
+                merged = {
+                    "tenancy_id": vals.get("tenancy_id", request_record.tenancy_id.id),
+                    "property_id": vals.get("property_id", request_record.property_id.id),
+                    "company_id": vals.get("company_id", request_record.company_id.id),
+                }
+                self._prepare_rental_request_security(merged)
+        return super().write(vals)
+
+    def unlink(self):
+        """Rental-linked requests are deletable only by a Rental Manager."""
+        linked = self.filtered(lambda request: request.tenancy_id or request.property_id)
+        if linked and not (
+            self.env.su
+            or self.env.user.has_group("rental_management.property_rental_manager")
+        ):
+            raise AccessError(_("Only a Rental Manager can delete rental-linked maintenance requests."))
+        return super().unlink()
 
     @api.depends("invoice_id")
     def _compute_invoice_state(self):
@@ -162,8 +270,18 @@ class PropertyMaintenance(models.Model):
                     raise ValidationError(_("Maintenance property must match the rental contract property."))
 
     def action_crete_invoice(self):
-        """Create the maintenance invoice once; method name retained for XML compatibility."""
+        """Create the maintenance invoice idempotently.
+
+        The legacy method name is retained because existing XML buttons reference
+        it, but accounting creation follows Odoo's normal access, fiscal-position
+        and tax engine rules.
+        """
         self.ensure_one()
+        self.env.cr.execute(
+            "SELECT id FROM maintenance_request WHERE id = %s FOR UPDATE",
+            (self.id,),
+        )
+        self.invalidate_recordset(["invoice_id"])
         if self.invoice_id:
             return {
                 "type": "ir.actions.act_window",
@@ -176,28 +294,42 @@ class PropertyMaintenance(models.Model):
         partner = self.landlord_id or self.tenancy_id.property_landlord_id
         if not partner:
             raise UserError(_("Set a landlord before creating the maintenance invoice."))
-        move = self.env["account.move"].with_company(self.company_id).create(
-            {
-                "partner_id": partner.id,
-                "move_type": "out_invoice",
-                "invoice_date": fields.Date.context_today(self),
-                "company_id": self.company_id.id,
-                "currency_id": self.currency_id.id,
-                "maintenance_request_id": self.id,
-                "tenancy_id": self.tenancy_id.id,
-                "invoice_origin": self.name,
-                "invoice_line_ids": [
-                    Command.create(
-                        {
-                            "product_id": self.maintenance_type_id.product_variant_id.id,
-                            "name": _("Maintenance: %s") % self.display_name,
-                            "quantity": 1.0,
-                            "price_unit": self.price,
-                        }
-                    )
-                ],
-            }
-        )
+        product = self.maintenance_type_id.product_variant_id
+        if not product:
+            raise UserError(_("The selected maintenance type has no product variant."))
+        move_model = self.env["account.move"].with_company(self.company_id)
+        if not move_model.browse().has_access("create"):
+            raise AccessError(
+                _("Billing invoice creation access is required to create the maintenance invoice.")
+            )
+        fiscal_position = partner.with_company(self.company_id).property_account_position_id
+        taxes = product.taxes_id.filtered(lambda tax: tax.company_id == self.company_id)
+        if fiscal_position and taxes:
+            taxes = fiscal_position.map_tax(taxes)
+        move_vals = {
+            "partner_id": partner.id,
+            "move_type": "out_invoice",
+            "invoice_date": fields.Date.context_today(self),
+            "company_id": self.company_id.id,
+            "currency_id": self.currency_id.id,
+            "maintenance_request_id": self.id,
+            "tenancy_id": self.tenancy_id.id,
+            "invoice_origin": self.name,
+            "invoice_line_ids": [
+                Command.create(
+                    {
+                        "product_id": product.id,
+                        "name": _("Maintenance: %s") % self.display_name,
+                        "quantity": 1.0,
+                        "price_unit": self.price,
+                        "tax_ids": [Command.set(taxes.ids)],
+                    }
+                )
+            ],
+        }
+        if fiscal_position:
+            move_vals["fiscal_position_id"] = fiscal_position.id
+        move = move_model.create(move_vals)
         if self.env["ir.config_parameter"].sudo().get_param(
             "rental_management.invoice_post_type"
         ) == "automatically":
@@ -211,6 +343,7 @@ class PropertyMaintenance(models.Model):
             "view_mode": "form",
             "target": "current",
         }
+
 
 
 class MaintenanceProduct(models.Model):

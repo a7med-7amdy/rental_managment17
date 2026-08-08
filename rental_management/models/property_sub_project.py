@@ -11,13 +11,18 @@ class PropertySubProject(models.Model):
     _name = "property.sub.project"
     _inherit = ["mail.thread", "mail.activity.mixin"]
     _description = "Property Sub Project Details"
+    _check_company_auto = True
 
     # Sub Project Details
     name = fields.Char(string="Name", required=True, translate=True)
     project_sequence = fields.Char(string="Code", required=True)
     image_1920 = fields.Image(string="Image")
-    property_project_id = fields.Many2one("property.project",
-                                          string="Project")
+    property_project_id = fields.Many2one(
+        "property.project",
+        string="Project",
+        check_company=True,
+        index=True,
+    )
     landlord_id = fields.Many2one("res.partner", store=True,
                                   related="property_project_id.landlord_id",
                                   string="Landlord")
@@ -35,9 +40,14 @@ class PropertySubProject(models.Model):
                                           string="Property Subtype")
 
     # Company & Currency
-    company_id = fields.Many2one("res.company",
-                                 related="property_project_id.company_id",
-                                 string="Company", required=True)
+    company_id = fields.Many2one(
+        "res.company",
+        related="property_project_id.company_id",
+        string="Company",
+        required=True,
+        store=True,
+        index=True,
+    )
     currency_id = fields.Many2one("res.currency",
                                   related="property_project_id.currency_id",
                                   string="Currency")
@@ -89,9 +99,12 @@ class PropertySubProject(models.Model):
     floor_created = fields.Integer()
 
     # Basic Details
-    sale_lease = fields.Selection([("rent", "Rent"),
-                                   ("sale", "Sale")],
-                                  string="Sale Lease", default="rent")
+    sale_lease = fields.Selection(
+        related="property_project_id.sale_lease",
+        string="Sale Lease",
+        store=True,
+        readonly=True,
+    )
     total_floors = fields.Integer(string="Total Floors")
     units_per_floor = fields.Integer(string="Units per Floor")
     total_area = fields.Float(string="Total Property Area",
@@ -169,57 +182,54 @@ class PropertySubProject(models.Model):
     # Valuation Calculation
     @api.depends('sale_lease')
     def compute_properties_statics(self):
-        for rec in self:
-            total_area = 0.0
-            available_area = 0.0
-            total_values = 0.0
-            total_maintenance = 0.0
-            total_collection = 0.0
-            scope_of_collection = 0.0
-            properties = self.env['property.details']
-            project_domain = [('subproject_id', '=', rec.id)]
-            properties_ids = self.env['property.details'].search(
-                project_domain).mapped('id')
-            properties_sale = self.env['property.vendor'].search(
-                [('property_id', 'in', properties_ids)])
-            properties_tenancy = self.env['tenancy.details'].search(
-                [('property_id', 'in', properties_ids)])
-            if rec.sale_lease == 'sale':
-                sale_domain = project_domain + \
-                    [('sale_lease', '=', 'for_sale')]
-                total_area = sum(properties.search(
-                    sale_domain).mapped('total_area'))
-                available_area = sum(properties.search(
-                    sale_domain + [('stage', '=', 'available')]).mapped('total_area'))
-                total_values = sum(properties.search(
-                    sale_domain).mapped('price'))
-                total_maintenance = sum(properties.search(
-                    sale_domain + [('is_maintenance_service', '=', True)]).mapped('total_maintenance'))
-                total_collection = sum(properties_sale.mapped('paid_amount'))
-                scope_of_collection = sum(
-                    properties_sale.mapped('remaining_amount'))
-            if rec.sale_lease == 'rent':
-                tenancy_domain = [
-                    ('sale_lease', '=', 'for_tenancy')] + project_domain
-                total_area = sum(properties.search(
-                    tenancy_domain).mapped('total_area'))
-                available_area = sum(properties.search(
-                    tenancy_domain + [('stage', '=', 'available')]).mapped('total_area'))
-                total_values = sum(properties.search(
-                    tenancy_domain).mapped('price'))
-                total_maintenance = sum(properties.search(
-                    tenancy_domain + [('is_maintenance_service', '=', True)]).mapped('total_maintenance'))
-                total_collection = sum(
-                    properties_tenancy.mapped('paid_tenancy'))
-                scope_of_collection = sum(
-                    properties_tenancy.mapped('remain_tenancy'))
-            rec.total_area = total_area
-            rec.available_area = available_area
-            rec.total_values = total_values
-            rec.total_maintenance = total_maintenance
-            rec.total_collection = total_collection
-            rec.scope_of_collection = scope_of_collection
+        if not self:
+            return
+        property_model = self.env["property.details"]
+        properties = property_model.search([("subproject_id", "in", self.ids)])
+        property_ids = properties.ids
+        sales = self.env["property.vendor"].search([("property_id", "in", property_ids)]) if property_ids else self.env["property.vendor"].browse()
+        contracts = self.env["tenancy.details"].search([("property_id", "in", property_ids)]) if property_ids else self.env["tenancy.details"].browse()
 
+        properties_by_parent = {}
+        for prop in properties:
+            parent = prop.subproject_id
+            if parent:
+                properties_by_parent.setdefault(parent.id, self.env["property.details"].browse())
+                properties_by_parent[parent.id] |= prop
+        sales_by_property = {}
+        for sale in sales:
+            sales_by_property.setdefault(sale.property_id.id, self.env["property.vendor"].browse())
+            sales_by_property[sale.property_id.id] |= sale
+        contracts_by_property = {}
+        for contract in contracts:
+            contracts_by_property.setdefault(contract.property_id.id, self.env["tenancy.details"].browse())
+            contracts_by_property[contract.property_id.id] |= contract
+
+        for rec in self:
+            purpose = "for_sale" if rec.sale_lease == "sale" else "for_tenancy"
+            rec_properties = properties_by_parent.get(rec.id, property_model.browse()).filtered(
+                lambda prop: prop.sale_lease == purpose
+            )
+            rec.total_area = sum(rec_properties.mapped("total_area"))
+            rec.available_area = sum(
+                rec_properties.filtered(lambda prop: prop.stage == "available").mapped("total_area")
+            )
+            rec.total_values = sum(rec_properties.mapped("price"))
+            rec.total_maintenance = sum(
+                rec_properties.filtered("is_maintenance_service").mapped("total_maintenance")
+            )
+            if rec.sale_lease == "sale":
+                rec_sales = self.env["property.vendor"].browse()
+                for prop in rec_properties:
+                    rec_sales |= sales_by_property.get(prop.id, self.env["property.vendor"].browse())
+                rec.total_collection = sum(rec_sales.mapped("paid_amount"))
+                rec.scope_of_collection = sum(rec_sales.mapped("remaining_amount"))
+            else:
+                rec_contracts = self.env["tenancy.details"].browse()
+                for prop in rec_properties:
+                    rec_contracts |= contracts_by_property.get(prop.id, self.env["tenancy.details"].browse())
+                rec.total_collection = sum(rec_contracts.mapped("paid_tenancy"))
+                rec.scope_of_collection = sum(rec_contracts.mapped("remain_tenancy"))
     # Onchange
     # Property Project info
     @api.onchange("property_project_id")
@@ -348,8 +358,8 @@ class SubProjectDocument(models.Model):
     name = fields.Char(string="Name", required=True)
     document_name = fields.Char(string="Document Name")
     document_file = fields.Binary(string="Document", required=True)
-    user_id = fields.Many2one("res.users", string="Added by", required=True)
-    subproject_id = fields.Many2one('property.sub.project')
+    user_id = fields.Many2one("res.users", string="Added by", required=True, default=lambda self: self.env.user)
+    subproject_id = fields.Many2one('property.sub.project', ondelete='cascade', index=True)
 
 
 # Project Connectivity Line
@@ -357,7 +367,7 @@ class SubprojectConnectivityLine(models.Model):
     _name = 'subproject.connectivity.line'
     _description = "Sub Project Connectivity Line"
 
-    subproject_id = fields.Many2one('property.sub.project')
+    subproject_id = fields.Many2one('property.sub.project', ondelete='cascade', index=True)
     connectivity_id = fields.Many2one('property.connectivity',
                                       string="Nearby Connectivity")
     name = fields.Char(string="Name", translate=True)
@@ -374,7 +384,7 @@ class ProjectImagesLine(models.Model):
 
     title = fields.Char(string='Title', translate=True)
     sequence = fields.Integer(default=10)
-    subproject_id = fields.Many2one('property.sub.project')
+    subproject_id = fields.Many2one('property.sub.project', ondelete='cascade', index=True)
     image = fields.Image(string='Images')
     video_url = fields.Char("Video URL",
                             help="URL of a video for showcasing your property.")
